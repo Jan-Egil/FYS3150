@@ -1,2 +1,2 @@
 # FYS3150
-Projects FYS3150/4150
+I have no idea what I'm doing, pls send help, not nudes.
