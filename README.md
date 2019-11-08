@@ -1,6 +1,3 @@
 # FYS3150
-I have no idea what I'm doing, pls send help, not nudes.
 
-Ellers er alt fint i livet
-
-egnt ikke
+FYS3150 (Comutational Physics) GitHub for Jan Egil Ødegård (janeod). Project 4 & Project 5.
