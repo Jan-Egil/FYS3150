@@ -19,7 +19,7 @@ void Flip_n_calc(int L, int N, arma::mat Lat, double E, double M, double Temp, s
 int main()
 {
     int L = 20; //Size of lattice
-    int N = 10000; //Number of cycles
+    int N = 100000; //Number of cycles
     string a;
     cout << "Do you want to create an ordered lattice, or a random lattice?" << endl;
     cout << "Type 'a' for ordered. Type 'b' for random." << endl;
@@ -41,8 +41,9 @@ int main()
         cout << "Aborting program.." << endl << endl;
         return 0;
     }
-    double Temp = 2.4;
+    double Temp = 1;
     string filename = "test";
+    cout << E << " " << M << endl;
     Flip_n_calc(L,N,Lat,E,M,Temp,filename);
     return 0;
 }
@@ -65,7 +66,7 @@ tuple<double,double,arma::mat> Init_State_Random(int L)
     double randomval;
     random_device rd;
     mt19937_64 gen(rd());
-    uniform_real_distribution<double> RandomNumberGenerator(0.0,1.0); //Initialize a uniform PDF
+    uniform_real_distribution<double> RandomNumberGenerator(0.0,1.0); //Initialize a uniform PDF RNG
     for (int i = 0;i < L;i++)
     {
         for (int j = 0;j < L;j++)
@@ -100,22 +101,22 @@ tuple<double,double> Calc_Init_Vals(arma::mat A, int L)
             {
                 if (j == 0)
                 {
-                    E_init += A(i,j)*(A(i,L-1)+A(L-1,j));
+                    E_init -= A(i,j)*(A(i,L-1)+A(L-1,j));
                 }
                 else
                 {
-                    E_init += A(i,j)*(A(i,j-1)+A(L-1,j));
+                    E_init -= A(i,j)*(A(i,j-1)+A(L-1,j));
                 }
             }
             else
             {
                 if (j == 0)
                 {
-                    E_init += A(i,j)*(A(i-1,j)+A(i,L-1));
+                    E_init -= A(i,j)*(A(i-1,j)+A(i,L-1));
                 }
                 else
                 {
-                    E_init += A(i,j)*(A(i-1,j)+A(i,j-1));
+                    E_init -= A(i,j)*(A(i-1,j)+A(i,j-1));
                 }
             }
         }
@@ -142,7 +143,7 @@ void Flip_n_calc(int L, int N, arma::mat Lat, double E, double M, double Temp, s
     DeltaEList(2) = 1;
     DeltaEList(3) = exp(-4/Temp); DeltaEList(4) = exp(-8/Temp);
 
-    for (int i = 0;i < N;i++)
+    for (int i = 1;i <= N;i++)
     {
         for (int j = 0;j < L*L;j++)
         {
@@ -151,45 +152,45 @@ void Flip_n_calc(int L, int N, arma::mat Lat, double E, double M, double Temp, s
             {
                 if(Column == 0)
                 {
-                    DeltaE = Lat(Row,Column)*(Lat(Row,L-1)+Lat(Row,Column+1)+Lat(L-1,Column)+Lat(Row+1,Column))*(-2);
+                    DeltaE = -Lat(Row,Column)*(Lat(Row,L-1)+Lat(Row,Column+1)+Lat(L-1,Column)+Lat(Row+1,Column))*(-2);
                 }
                 else if(Column == L-1)
                 {
-                    DeltaE = Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,0)+Lat(L-1,Column)+Lat(Row+1,Column))*(-2);
+                    DeltaE = -Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,0)+Lat(L-1,Column)+Lat(Row+1,Column))*(-2);
                 }
                 else
                 {
-                    DeltaE = Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,Column+1)+Lat(Row+1,Column)+Lat(L-2,Column))*(-2);
+                    DeltaE = -Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,Column+1)+Lat(Row+1,Column)+Lat(L-2,Column))*(-2);
                 }
             }
             else if (Row == L-1)
             {
                 if(Column == 0)
                 {
-                    DeltaE = Lat(Row,Column)*(Lat(Row,L-1)+Lat(Row,Column+1)+Lat(0,Column)+Lat(Row-1,Column))*(-2);
+                    DeltaE = -Lat(Row,Column)*(Lat(Row,L-1)+Lat(Row,Column+1)+Lat(0,Column)+Lat(Row-1,Column))*(-2);
                 }
                 else if(Column == L-1)
                 {
-                    DeltaE = Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,0)+Lat(0,Column)+Lat(Row-1,Column))*(-2);
+                    DeltaE = -Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,0)+Lat(0,Column)+Lat(Row-1,Column))*(-2);
                 }
                 else
                 {
-                    DeltaE = Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,Column+1)+Lat(Row-1,Column)+Lat(0,Column))*(-2);
+                    DeltaE = -Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,Column+1)+Lat(Row-1,Column)+Lat(0,Column))*(-2);
                 }
             }
             else
             {
                 if(Column == 0)
                 {
-                    DeltaE = Lat(Row,Column)*(Lat(Row,L-1)+Lat(Row,Column+1)+Lat(Row+1,Column)+Lat(Row-1,Column))*(-2);
+                    DeltaE = -Lat(Row,Column)*(Lat(Row,L-1)+Lat(Row,Column+1)+Lat(Row+1,Column)+Lat(Row-1,Column))*(-2);
                 }
                 else if(Column == L-1)
                 {
-                    DeltaE = Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,0)+Lat(Row+1,Column)+Lat(Row-1,Column))*(-2);
+                    DeltaE = -Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,0)+Lat(Row+1,Column)+Lat(Row-1,Column))*(-2);
                 }
                 else
                 {
-                    DeltaE = Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,Column+1)+Lat(Row-1,Column)+Lat(Row+1,Column))*(-2);
+                    DeltaE = -  Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,Column+1)+Lat(Row-1,Column)+Lat(Row+1,Column))*(-2);
                 }
             }
             DeltaM = Lat(Row,Column)*(-2);
@@ -223,14 +224,14 @@ void Flip_n_calc(int L, int N, arma::mat Lat, double E, double M, double Temp, s
                     }
                 }
             }
-        E += DeltaE; M += DeltaM; Abs_M = abs(M);
+            E += DeltaE; M += DeltaM; Abs_M = abs(M);
         }
-    E_tot += E; E2_tot += E*E;
-    M_tot += M; M2_tot += M*M;
+        E_tot += E; E2_tot += E*E;
+        M_tot += M; M2_tot += M*M; Abs_M_tot += Abs_M;
 
 
 
-    outfile << E_tot/(i+1) << " " << M_tot/(i+1) << " " << E2_tot/(i+1) << " " << M2_tot << " " << Abs_M << endl;
+        outfile << E_tot << " " << M_tot << " " << E2_tot << " " << M2_tot << " " << Abs_M << endl;
 
     }
     outfile.close();
