@@ -12,14 +12,21 @@ using namespace std;
 tuple<double,double,arma::mat> Init_State_Ordered(int L);
 tuple<double,double,arma::mat> Init_State_Random(int L);
 tuple<double,double> Calc_Init_Vals(arma::mat A, int L);
-void Flip_n_calc(int L, int N, arma::mat Lat, double E, double M, double Temp, string filename);
+void flip_n_calc_equilibrium(int L, int N, arma::mat Lat, double E, double M, double Temp, string filename);
 //End foreward declaration
 
 
 int main()
 {
-    int L = 20; //Size of lattice
-    int N = 100000; //Number of cycles
+    int L;
+    cout << "How big do you want your (square) lattice to be?" << endl;
+    cout << "L = {2,20,40,60,80,100} recommended." << endl;
+    cin >> L;
+
+    int N = 1000000;
+    //cout << "How many MC sweeps to you want to do?" << endl;
+    //cin >> N;
+
     string a;
     cout << "Do you want to create an ordered lattice, or a random lattice?" << endl;
     cout << "Type 'a' for ordered. Type 'b' for random." << endl;
@@ -41,10 +48,10 @@ int main()
         cout << "Aborting program.." << endl << endl;
         return 0;
     }
+
     double Temp = 1;
     string filename = "test";
-    cout << E << " " << M << endl;
-    Flip_n_calc(L,N,Lat,E,M,Temp,filename);
+    flip_n_calc_equilibrium(L,N,Lat,E,M,Temp,filename);
     return 0;
 }
 
@@ -125,14 +132,13 @@ tuple<double,double> Calc_Init_Vals(arma::mat A, int L)
 }
 
 
-void Flip_n_calc(int L, int N, arma::mat Lat, double E, double M, double Temp, string filename)
+void flip_n_calc_equilibrium(int L, int N, arma::mat Lat, double E, double M, double Temp, string filename)
 {
     ofstream outfile;
     outfile.open(filename+".txt");
 
     double E_tot = E; double M_tot = M; double E2_tot = E*E; double M2_tot = M*M; double Abs_M_tot = abs(M);
     outfile << "<E> - <M> - <E^2> - <M^2> - <|M|>" << endl;
-    outfile << E_tot << " " << M_tot << " " << E2_tot << " " << M2_tot << " " << Abs_M_tot << endl;
 
     random_device rand; mt19937_64 gen(rand()); uniform_int_distribution<int> RandintGen(0,L-1); uniform_real_distribution<double> RandFloatGen(0,1);
 
@@ -142,12 +148,12 @@ void Flip_n_calc(int L, int N, arma::mat Lat, double E, double M, double Temp, s
     DeltaEList(0) = exp(8/Temp); DeltaEList(1) = exp(4/Temp);
     DeltaEList(2) = 1;
     DeltaEList(3) = exp(-4/Temp); DeltaEList(4) = exp(-8/Temp);
-
     for (int i = 1;i <= N;i++)
     {
         for (int j = 0;j < L*L;j++)
         {
             Row = RandintGen(gen); Column = RandintGen(gen);
+            DeltaE = 0; DeltaM = 0;
             if (Row == 0)
             {
                 if(Column == 0)
@@ -160,7 +166,7 @@ void Flip_n_calc(int L, int N, arma::mat Lat, double E, double M, double Temp, s
                 }
                 else
                 {
-                    DeltaE = -Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,Column+1)+Lat(Row+1,Column)+Lat(L-2,Column))*(-2);
+                    DeltaE = -Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,Column+1)+Lat(Row+1,Column)+Lat(L-1,Column))*(-2);
                 }
             }
             else if (Row == L-1)
@@ -190,7 +196,7 @@ void Flip_n_calc(int L, int N, arma::mat Lat, double E, double M, double Temp, s
                 }
                 else
                 {
-                    DeltaE = -  Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,Column+1)+Lat(Row-1,Column)+Lat(Row+1,Column))*(-2);
+                    DeltaE = -Lat(Row,Column)*(Lat(Row,Column-1)+Lat(Row,Column+1)+Lat(Row-1,Column)+Lat(Row+1,Column))*(-2);
                 }
             }
             DeltaM = Lat(Row,Column)*(-2);
@@ -231,7 +237,7 @@ void Flip_n_calc(int L, int N, arma::mat Lat, double E, double M, double Temp, s
 
 
 
-        outfile << E_tot << " " << M_tot << " " << E2_tot << " " << M2_tot << " " << Abs_M << endl;
+        outfile << E_tot/(L*L*(i+1)) << " " << M_tot/(L*L*(i+1)) << " " << E2_tot/(L*L*(i+1)) << " " << M2_tot/(L*L*(i+1)) << " " << Abs_M_tot/(L*L*(i+1)) << endl;
 
     }
     outfile.close();
