@@ -21,6 +21,7 @@ tuple<double,double,double,double> flip_n_calc_ordinary_output(int L, int N, arm
 
 int main()
 {
+    /*
     int L;
     cout << "How big do you want your (square) lattice to be?" << endl;
     cout << "L = {2,20,40,60,80,100} recommended." << endl;
@@ -51,29 +52,34 @@ int main()
         cout << "Aborting program.." << endl << endl;
         return 0;
     }
-
-    double Temp = 1;
-    string filename = "histogramdata1";
+    */
+    //double Temp = 1;
+    //string filename = "histogramdata1";
     //flip_n_calc_equilibrium(L,N,Lat,E,M,Temp,filename);
     //flip_n_calc_ordinary(L,N,Lat,E,M,Temp);
     //flip_n_calc_probdist(L,N,Lat,E,M,Temp,filename);
+    int N = 1000000;
     for(int L = 40;L <= 100;L+=20){
         ofstream outfile;
-        outfile.open(to_string(L)+"X"+to_string(L)+".txt");
+        outfile.open(to_string(L)+"X"+to_string(L)+"_2.txt");
         outfile << "T - <E> - <|M|> - Cv - Chi" << endl;
         tuple<double,double,double,double> tuplevals;
-        double Eret; double Mret; double Cvret; double chiret; double T;
+        tuple<double,double,arma::mat> tupleinit;
+        double E_start; double M_start; arma::mat Lat;
+        double Eret; double Mret; double Cvret; double chiret;
 
         for (double T = 2.0;T <= 2.3;T += 0.05)
         {
-            cout << T << endl;
-            tuplevals = flip_n_calc_ordinary_output(L,N,Lat,E,M,T);
+            tupleinit = Init_State_Ordered(L);
+            E_start = get<0>(tupleinit); M_start = get<1>(tupleinit); Lat = get<2>(tupleinit);
+            cout << T << " " << L << " Start" << endl;
+            tuplevals = flip_n_calc_ordinary_output(L,N,Lat,E_start,M_start,T);
             Eret = get<0>(tuplevals); Mret = get<1>(tuplevals);
             Cvret = get<2>(tuplevals); chiret = get<3>(tuplevals);
             outfile << T << " " << Eret << " " << Mret << " " << Cvret << " " << chiret << endl;
-            cout << T << endl;
+            cout << T << " " << L << " End" << endl;
         }
-        outfile.close()
+        outfile.close();
     }
     return 0;
 }
@@ -494,7 +500,7 @@ void flip_n_calc_probdist(int L, int N, arma::mat Lat, double E, double M, doubl
 
 tuple<double,double,double,double> flip_n_calc_ordinary_output(int L, int N, arma::mat Lat, double E, double M, double Temp)
 {
-    double E_tot = 0; double E2_tot = 0;
+    double E_tot = E; double E2_tot = E*E;
     double M_tot = M; double M2_tot = M*M;
     double abs_M_tot = abs(M_tot); double abs_M2_tot = abs(M_tot)*abs(M_tot);
 
@@ -590,19 +596,19 @@ tuple<double,double,double,double> flip_n_calc_ordinary_output(int L, int N, arm
             }
             E += DeltaE; M += DeltaM; Abs_M = abs(M);
         }
-        if(i > 1000000)
+        if(i > 100000)
         {
             E_tot += E; E2_tot += E*E;
             M_tot += M; M2_tot += M*M;
             abs_M_tot += Abs_M; abs_M2_tot += Abs_M*Abs_M;
         }
     }
-    double mean_E = E_tot/(N+1-1000000);
-    double mean_M = M_tot/(N+1-1000000);
-    double mean_E2 = E2_tot/(N+1-1000000);
-    double mean_M2 = M2_tot/(N+1-1000000);
-    double absmean_M = abs_M_tot/(N+1-1000000);
-    double absmean_M2 = abs_M2_tot/(N+1-1000000);
+    double mean_E = E_tot/(N+1-100000);
+    double mean_M = M_tot/(N+1-100000);
+    double mean_E2 = E2_tot/(N+1-100000);
+    double mean_M2 = M2_tot/(N+1-100000);
+    double absmean_M = abs_M_tot/(N+1-100000);
+    double absmean_M2 = abs_M2_tot/(N+1-100000);
 
     double cv = (mean_E2-(mean_E*mean_E))/(Temp*Temp);
     double chi = (mean_M2-(mean_M*mean_M))/Temp;
