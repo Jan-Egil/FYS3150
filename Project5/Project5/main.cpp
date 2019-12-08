@@ -14,7 +14,7 @@ void ExplicitIntegrator1D(int SpaceN, double DelX, double TotTime);
 void ImplicitIntegrator1D(int SpaceN, int TimeN, double DelT, double DelX, double alpha);
 void ImplicitCrankNicolson1D(int SpaceN, double DelX, double TotTime);
 arma::rowvec TriDiagSolver(int N, double b, double e, arma::rowvec g);
-void ExplicitIntegrator2D(int SpaceN, double LenX, double LenY, double TotTime);
+void ExplicitIntegrator2D(int Nx, int Ny, double h, double TotTime);
 void ExplicitIntegratorPGP2D(int SpaceN, double LenX, double LenY, double TotTime);
 
 //END Foreward Declaration
@@ -23,6 +23,7 @@ int main()
 {
     //ExplicitIntegrator1D(100,1,1);
     //ImplicitIntegrator1D(10,10000,0.1,0.005,0.5);
+    ExplicitIntegrator2D(10,10,0.01,1);
     return 0;
 }
 
@@ -38,6 +39,8 @@ void ExplicitIntegrator1D(int SpaceN, double LenX, double TotTime)
     arma::rowvec unow = arma::zeros<arma::rowvec>(SpaceN+1);
     arma::rowvec uprev = arma::zeros<arma::rowvec>(SpaceN+1);
     uprev(0) = unow(0) = 0; uprev(SpaceN) = unow(SpaceN) = 1;
+
+    outfile << 0 << " " << unow;
 
     for (int j = 1;j <= TimeN ; j++)
     {
@@ -96,12 +99,40 @@ arma::rowvec TriDiagSolver(int N, double b, double e, arma::rowvec g)
     return u;
 }
 
-void ExplicitIntegrator2D(int SpaceN, double LenX, double LenY, double TotTime)
+void ExplicitIntegrator2D(int Nx, int Ny, double h, double TotTime)
 {
-    int a = 0;
-}
+    ofstream outfile; outfile.open("Explicit2D.txt");
 
+    double DelT = (h*h)/4;
+    double alpha = DelT/(h*h);
+    int TimeN = TotTime/DelT;
+    cout << TimeN << endl;
+
+    arma::mat unow(Nx+1,Ny+1,arma::fill::zeros);
+    arma::mat uprev(Nx+1,Ny+1,arma::fill::zeros);
+    uprev.row(0) = arma::ones<arma::rowvec>(Ny+1); unow.row(0) = arma::ones<arma::rowvec>(Ny+1);
+    uprev.row(Nx) = arma::ones<arma::rowvec>(Ny+1); unow.row(Nx) = arma::ones<arma::rowvec>(Ny+1);
+
+    outfile << uprev << endl << endl;
+
+    for (int k = 1;k <= TimeN ; k++)
+    {
+        for (int i = 1;i < Nx;i++)
+        {
+            for (int j = 1;j < Ny;j++)
+            {
+                unow(i,j) = uprev(i,j) + alpha*(uprev(i+1,j) + uprev(i-1,j) + uprev(i,j+1) + uprev(i,j-1) - 4*uprev(i,j));
+            }
+        }
+        //outfile << k*DelT << " " << unow << endl;
+        outfile << unow << endl << endl;
+        uprev = unow;
+        cout << k << endl;
+    }
+    outfile.close();
+}
 void ExplicitIntegratorPGP2D(int SpaceN, double LenX, double LenY, double TotTime)
 {
     int a = 0;
 }
+
