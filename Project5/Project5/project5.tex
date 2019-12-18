@@ -1,0 +1,1003 @@
+\documentclass[reprint,english,notitlepage]{revtex4-1}  % defines the basic parameters of the document
+
+% if you want a single-column, remove reprint
+
+% allows special characters (including æøå)
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+
+%% note that you may need to download some of these packages manually, it depends on your setup.
+%% I recommend downloading TeXMaker, because it includes a large library of the most common packages.
+\usepackage{physics,amssymb}  % mathematical symbols (physics imports amsmath)
+\usepackage{graphicx}         % include graphics such as plots
+\usepackage{xcolor}           % set colors
+\usepackage{hyperref}         % automagic cross-referencing (this is GODLIKE)
+\usepackage{tikz}             % draw figures manually
+\usepackage{listings}         % display code
+\usepackage{subfigure}        % imports a lot of cool and useful figure commands
+\usepackage{cancel}
+% defines the color of hyperref objects
+% Blending two colors:  blue!80!black  =  80% blue and 20% black
+\hypersetup{ % this is just my personal choice, feel free to change things
+    colorlinks,
+    linkcolor={red!50!black},
+    citecolor={blue!50!black},
+    urlcolor={blue!80!black}}
+
+%% Defines the style of the programming listing
+%% This is actually my personal template, go ahead and change stuff if you want
+\lstset{ %
+	inputpath=,
+	backgroundcolor=\color{white!88!black},
+	basicstyle={\ttfamily\scriptsize},
+	commentstyle=\color{magenta},
+	language=Python,
+	morekeywords={True,False},
+	tabsize=4,
+	stringstyle=\color{green!55!black},
+	frame=single,
+	keywordstyle=\color{blue},
+	showstringspaces=false,
+	columns=fullflexible,
+	keepspaces=true}
+
+
+\begin{document}
+\title{A Numerical Analysis on Partial Differential Equations with Attempts at Applications in Geophysical Processes}   % self-explanatory
+\author{Jan Egil Ødegård} % self-explanatory
+\date{December 18th, 2019}                             % self-explanatory
+\noaffiliation                            % ignore this
+\begin{abstract} % marks the beginning of the abstract
+\begin{center}
+The source code files can be found in my \href{https://github.com/Jan-Egil/FYS3150}{GitHub Repository}
+\end{center}
+
+For this report, I have looked closer at a general partial differential equation (PDE) and looked at different methods of solving these numerically given a set of boundary and initial conditions. For a PDE in 1 spatial dimension, I have looked at three different schemes for solving them numerically; an explicit scheme, an implicit scheme, and what's known as an 'implicit Crank-Nicolson' scheme. I've looked closer at both the efficiency and relative error when using these methods compared to an analytically calculated value, where the explicit scheme ended up proving both more accurate and efficient than its implicit counterparts, though having a limitation in the ratio between spatially and temporal step sizes. Moving further, I've also extended the explicit scheme to 2 dimensions, taking into account the limitations that this method gives us. For a two-dimensional unitless system, the simulations returned sensible results as well. There has also been an attempt at applying this at the heat equation for the temperature distribution in the lithosphere of the Earth, though this has been without success. This likely stems from either an error in the initial logic of the algorithm, a bug in the program that has been written, or in the subsequent plotting.
+
+\end{abstract}                            % marks the end of the abstract
+\maketitle                                % creates the title, author, date & abstract
+
+
+% the fundamental components of scientific reports:
+\section{Introduction}
+
+Partial differential equations, or PDEs for short, are sets of differential equations in which we need to solve for more than one variable. Sometimes, these are straightforward to solve analytically, with closed form solutions, but more often than not, PDEs tend to be difficult or impossible to solve analytically. Using numerical approximation methods however, it is possible to construct a somewhat good solution regardless of the complexity of the problem at hand.
+\\
+\\
+In this article, we have attempted to solve a set of PDEs using different methods, and we've looked at the limitations and requirements that these methods give us. We've first looked closer at a 1 dimensional-case with (unitless) time and a spatial coordinate as the unknowns. We've used 3 different methods to attack this, an explicit method, primarily using the forward-Euler algorithm, an implicit method, primarily using the backward-Euler algorithm, and a method known as the implicit Crank-Nicolson, which uses a combination of forward and backward Euler approximations.
+\\
+\\
+We've also extended this into a 2-dimensional spatial system, applying the use of the explicit method. We will finish this off with attempting to solve the 2 dimensional heat equation for a geophysical system in the lithosphere numerically. This will also be done using the explicit scheme. 
+
+\newpage
+
+\section{Theory}
+
+We are first looking closer at a general case of a partial differential equation. This is followed by taking a closer look at an application of partial differential equations, namely the heat equation. We finish this with applying the heat equation to a model that we construct of the lithosphere of the Earth, with the goal of looking at its temperature distribution.
+
+\subsection{Partial Differential Equations}
+
+\subsubsection{General Partial Differential Equations}
+
+A general PDE typically has a variable $u$ which is dependent on multiple other variables $u(x_1,\cdots,x_n)$, in which we take the derivative of some or all of these variables. For this article, we will in general be focusing on seperable PDEs taking the form:
+\begin{equation}
+    \nabla^2 u(\Vec{r},t) = \frac{\partial u(\Vec{r},t}{\partial t},
+\end{equation}
+where our unknown is a function of a spatial term and a temporal one. More specifically, we will be working in 1 and 2 spatial dimensions in a Cartesian coordinate system, meaning that these equations in general will take the form:
+\begin{equation}\label{eq:whatamIdoing}
+    \frac{\partial^2 u(x,t)}{\partial x^2} = \frac{\partial u(x,t)}{\partial t},
+\end{equation}
+\begin{equation}\label{eq:whatamIdoing2}
+    \frac{\partial^2 u(x,y,t)}{\partial x^2} + \frac{\partial^2 u(x,y,t)}{\partial y^2} = \frac{\partial u(x,y,t)}{\partial t}.
+\end{equation}
+
+When solving equations \ref{eq:whatamIdoing} or \ref{eq:whatamIdoing2} either numerically or analytically, we require that we know both the boundary conditions of the system ($T(0,t)$ and $T(L,t)$ with $x \in [0,L]$), as well as the initial condition of the system ($T(x,0)$).
+\\
+\\
+We will also look closer at the heat equation, which is a form of PDE with dimensionality included.
+
+\subsubsection{The Heat Equation}
+
+The heat equation (in 2 spatial dimensions) is given as\footnote{Matthews, P.C. Vector Calculus. London: Springer, 1998. Print. Springer Undergraduate Mathematics Ser. - p. 132, - equations (8.2) and (8.3).}:
+\begin{equation}\label{eq:HeatEquationFoReal}
+    \nabla(k\nabla T)+Q = \rho c_p \frac{\partial T}{\partial t},
+\end{equation}
+Here, $k$ is the thermal conductivity, given in units of $\text{W/m/}^o\text{C}$, we have $Q$ as the heat production, given in units of $\text{W/m}^3$, $\rho$ is the density, given in $\text{kg/m}^3$ and $c_p$ is the specific heat capacity, given in units of $\text{J/kg/}^o\text{C}^{-1}$. The temperature $T$ is a variable of 3 unknowns, which are the two spatial dimensional variables $x$ and $y$, as well as a temporal variable $t$. This gives us that $T \rightarrow T(x,y,t)$.
+
+\subsubsection{Expected Behaviour: Steady State}\label{sec:expect1}
+
+Given a regular system like the ones seen in equations \ref{eq:whatamIdoing} and \ref{eq:whatamIdoing2}, we want to figure out what the expected behaviour of the system will look like. This in general will depend on the initial conditions, as well as the boundary conditions of our system. For simplicity, we will only look at the 1 dimensional case, but it can be generalized to more dimensions. We will also be looking at the case where the initial conditions will be 0 ($u(x,0) = 0$ for all $x$), and with boundary conditions set as $u(0,t) = 0$, and $u(L,t) = 1$.
+\\
+\\
+Looking at this system after some time $t$ has elapsed, such that it has reached its steady state, we will be interested in how we expect the system to look like. For starters, in a system that has reached its steady state, we would expect that the following holds true:
+\begin{equation}
+    \frac{\partial u}{\partial t} = 0,
+\end{equation}
+This is the case because any deviation away from said steady state would imply that we won't be in the steady state after all. This leaves us with the equation
+\begin{equation}
+    \frac{\partial^2 u(x,t\rightarrow\infty)}{\partial x^2} = 0
+\end{equation}
+This is the 1D Laplace operation, which returns us an equation on the form $u(x,t\rightarrow\infty) = ax+b$. Assuming that the function $u(x,t)$ is separable such that $u(x,t) = V(x)S(t)x + F(x)G(t)$. Now, solving these for the boundary conditions, $u(0,t) = 0 \implies F(x)G(t) = 0$, and $u(L,t) = 1 \implies V(x)S(t) = \frac{1}{L}$. Implementing this, we can see that we in such a system could expect the following general behaviour:
+\begin{equation}\label{eq:linearexpectation}
+    u(x,t\rightarrow\infty) = \frac{x}{L}.
+\end{equation}
+We therefore simply expect a linear distribution of values for the 1D case. This is perfectly possible to expand to 2D, where the general expression will be linear for x and y values each on their own (Given equal boundary conditions for the x- and y-axes).
+\\
+\\
+For the heat equation in equation \ref{eq:HeatEquationFoReal}, it is more difficult to directly say what the expected steady state behaviour will look like, considering that we have several variables that can both vary spatially and temporally.
+
+\subsection{The Lithosphere}
+
+The lithosphere is, simply described, the solid, outermost sphere of a planet. For the Earth, this includes the crust, as well as the outermost solid part of the mantle. 
+
+\subsubsection{Parameters}
+
+For our model of the Earth's lithosphere, we will assume that it will have a constant density of $\rho = 3.5\cdot10^{12}\;\text{kg/km}^3$, a constant thermal conductivity $k = 2500\;\text{W/km/}^o\text{C}$ and a constant specific heat capacity $c_p = 1000\;\text{J/kg/}^o\text{C}^{-1}$. Since we are working with a constant thermal conductivity $k$, we can plug this outside the first gradient in equation \ref{eq:HeatEquationFoReal}, which gives us:
+\begin{equation}\label{eq:almostheatyo}
+    k\nabla^2T + Q = \rho c_p \frac{\partial T}{\partial t}.
+\end{equation}
+Since we know that this is in 2 dimensions, we can write out the gradient in equation \ref{eq:almostheatyo}, which gives us the following equation:
+\begin{equation}\label{eq:actuallyheatyo}
+    \Bigg[\frac{\partial^2 T}{\partial x^2} + \frac{\partial^2 T}{\partial y^2}\Bigg] + \frac{Q}{k} = \frac{\rho c_p}{k} \frac{\partial T}{\partial t}.
+\end{equation}
+
+As the boundary conditions, we will set the temperature of the top of the lithosphere to $T(0) = 8^o\text{C}$, and at the bottom of the lithosphere, which is $\sim 120\;\text{km}$ deep, to $T(120) = 1300^o\text{C}$. (We define down towards the core as the positive direction). We will model the heat production $Q$ to be dependent on depth $y$. This is because the heat production is directly linked with radioactive decay in the lithosphere, and radioactive isotopes are much more abundantly found closer to the surface as opposed to deeper down. 
+\begin{equation}
+    Q(y) = \begin{cases} 1.4\;\text{kW/km}^3 & y \in [0,20]\;\text{km}\\0.35\;\text{kW/km}^3 & y \in (20,40]\;\text{km}\\0.05\;\text{kW/km}^3 & y \in (40,120]\;\text{km} \end{cases}
+\end{equation}
+It is nice to note that we for simplicity use $km$ as a length unit here. We now rewrite equation \ref{eq:actuallyheatyo} in terms of the parameters being variables or constant:
+\begin{equation}
+    \Bigg[\frac{\partial^2 T(x,y,t)}{\partial x^2} + \frac{\partial^2 T(x,y,t)}{\partial y^2}\Bigg] + \frac{Q(y)}{k} = \frac{\rho c_p}{k} \frac{\partial T(x,y,t)}{\partial t}.
+\end{equation}
+The mantle "box" that we will be modelling will be $120\;\text{km}$ deep ($y \in [0,120]\;\text{km}$) and be $350\;\text{km}$ wide ($x \in [0,300]\;\text{km}$).
+
+\subsubsection{Radioactive Enrichment}
+
+We will attempt to model the remains of a geophysical process that occurred roughly 1 billion years ago, or $1\;Gy$ (Gigayear) ago, and see to what extent this proposed process has on the temperature distribution in the lithosphere at present day. The process in question creates an enrichment in the lithospheric mantle of radioactive isotopes like uranium ($U$), potassium ($K$) and thorium ($Th$). The enrichment will happen in a $150\;\text{km}$ wide area of the mantle, and only enrich the mantle with radioactive elements ($y \in [40-120]\;\text{km}$).
+\\
+\\
+Initially, the system will be in a steady state (for our numerical simulation coming up, we will have to wait for the system to reach the steady state). and following this, our mantle will be enriched with these radioactive elements. The way this will be modelled is by increasing the heat production in the mantle part of the lithosphere with an additional $Q_{add} = 0.5\;\text{kW/km}^3$. Initially, we will model the radioactive content without taking into account the radioactive decay. This means that the heat production $Q$ in the mantle will stay constant, and only change during the enrichment transition.
+\\
+\\
+The final change we will do to this model, is to include the decay of the radioactive isotopes into the calculations. The half lives and the heat production ratios can be seen in table \ref{tab:halflifepercent}.
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{|c|c|c|}
+        \hline 
+         Element & Half life [$Gy$]& Initial heat production\\
+         \hline\hline
+         Uranium [$U$] &$4.47$&40\% \\
+         Thorium [$Th$] & $14.0$ &40\%\\
+         Potassium [$K$] & $1.25$ &20\%\\
+         \hline
+    \end{tabular}
+    \caption{Half lives and the initial heat production percentage of the different enriching elements found in the mantle after enrichment. The percentages indicate only the distribution of the initial heat production, and as time progresses, the ratio of heat production in regards to the others will change depending on the halv life values of that given isotope.}
+    \label{tab:halflifepercent}
+\end{table}
+\\
+Using the values we have in table \ref{tab:halflifepercent}, we can construct an expression for the heat production in the enriched part of the mantle as a function of time. In general, the content of a given substance with a half life of $t_{h}$ after a given time $t$ is given as $N = N_0 (1/2)^{t/t_{h}}$. Since we initially have a production of $0.5\;\text{kW/km}^3$, the heat production will therefore be given as
+\begin{equation}\label{eq:halflifecurvy}
+    \begin{split}
+    Q_{add}(t) = 0.05 + 0.5&\Bigg[0.4\Big(\frac{1}{2}\Big)^{t/t_{[U]}}+0.4\Big(\frac{1}{2}\Big)^{t/t_{[Th]}}\\ &+0.2\Big(\frac{1}{2}\Big)^{t/t_{[K]}}\Bigg]
+    \end{split}
+\end{equation}
+Where $t_{[U]}$, $t_{[Th]}$ and $t_{[K]}$ are the half lives of uranium, thorium and potassium respectively. Equation \ref{eq:halflifecurvy} is simply derived from taking the half lives of the individual substances, together with their initial relative contribution to the heat production at time $t = 0$. This gives us the final expression for the heat production as being the following:
+\begin{equation}
+    Q(y) = \begin{cases} 1.4\;\text{kW/km}^3 & y \in [0,20]\;\text{km}\\0.35\;\text{kW/km}^3 & y \in (20,40]\;\text{km}\\Q_{mantle}(x,t) & y \in (40,120]\;\text{km} \end{cases}, 
+\end{equation}
+With $Q_{deep}(x,t)$ is defined as:
+\begin{equation}
+    Q_{mantle}(x,t) = \begin{cases} Q_{add}(t) & x\in [100,250]\;km\\0.05\;\text{kW/km}^3 & else\end{cases},
+\end{equation}
+and $Q_{add}(t)$ being what we defined in \ref{eq:halflifecurvy}. This will be our final expression for the additional heat production in the lithosphere. We are only interested in the additional heat production in a $150\;\text{km}$ wide area of the mantle, but we will also model the box as being $350\;\text{km}$ wide. This is done so that we can see the effect that this heat production has in a broader region outside the radioactively enriched area.
+
+\subsubsection{Expected Behaviour: Steady State}
+
+As for the expected behaviour of the temperature distribution, we will expect that it will after a while reach a steady state. This steady state will be different given the different systems we are looking at, but in general they will follow the same linear relationship $T(y,t\rightarrow\infty) = ay+b$ as in section \ref{sec:expect1}. (Just with $y$ instead of $x$, since depth is given by $y$). The model is split into three different sections, with the upper crust, the lower crust and the solid part of the mantle.
+\\
+\\
+Pre-enrichment, we would expect that the differing heat production in each of the different regions to dictate the slope of the linear function. With a uniform heat production $Q$, we would expect the slope to be perfectly linear all the way through the lithosphere. Since we have more heat production in the upper parts, we would expect a larger increase in the temperature as a function of depth for the upper crust as compared to the lower crust, and a larger increase in the lower crust as compared to the lithospheric mantle. If $a_{U}$ is the slope of the temperature as a function of depth in the upper crust, $a_{L}$ is for the lower crust, and $a_{M}$ is for the lithospheric mantle, we would expect the following to hold true:
+\begin{equation}
+    a_U > a_L > a_M.
+\end{equation}
+Mind, this is given the coordinate system where we defined the y-axis to point downwards, so that an increase in depth is given as the positive direction.
+\\
+\\
+Post-enrichment, things will grow more complicated considering that we will have a region of the mantle that will have a larger heat production as compared to another region. Since we also get a dependency in the x-direction as well as the y-direction, we can only reason qualitatively as to the expected behaviour, and not so much get a quantified answer. First of all, we would expect that the additional heat production in the mantle to radiate and diffuse out into both the crust, as well as to the non-enriched parts of the mantle. This, coupled with the fact that the less-heat producing part of the mantle effectively cooling the enriched part, will make this model of the lithosphere a bit more complex.
+\\
+\\
+Finally, when taking into account the half life, we would expect that this will slowly bring our system back to the original steady state as first discussed. Considering that the half lives of the substances are minimal as compared to the time scale of our simulation of roughly 1 billion years (ref table \ref{tab:halflifepercent}), our modelled simulation will not get back to the steady state as a whole, but will only gradually get there.
+
+\newpage
+
+\section{Algorithm}
+
+In general, we will be looking at the partial differential equation problem on the form,
+\begin{equation}\label{eq:ognabla}
+    \nabla^2u(\Vec{r},t) = \frac{\partial u(\Vec{r},t)}{\partial t},
+\end{equation}
+where $u(\Vec{r},t)$ is the function value at a given point $\Vec{r}$ at a given time $t$. For the 1-dimensional case, the left side simplifies, and we get the expression on the following form:
+\begin{equation}\label{eq:origexplicit}
+    \frac{\partial^2 u(\Vec{r},t)}{\partial x^2} = \frac{\partial u(\Vec{r},t)}{\partial t}.
+\end{equation}
+
+For the 1-dimensional case, we will use three different approaches to solving this problem. The derivations of these schemes can be found in Appendix \ref{app:deriv}.
+
+\subsection{The Numerical Schemes}
+
+\subsubsection{The Explicit Scheme}
+
+The explicit scheme is an implementation based on the usage of the forward-Euler algorithm. The time evolution is thus given by a standard first order forward Euler, on the form:
+\begin{equation}\label{eq:firstordertime}
+    \frac{\partial u}{\partial t} = u_t \approx \frac{u(x_i,t_j+\Delta t)-u(x_i,t_j)}{\Delta t}.
+\end{equation}
+To simplify notation, we will write $u(x_i,t_j) = u_{i,j}$, $u(x_i,t_j+\Delta t) = u_{i,j+1}$ and $u(x_i + \Delta x,t_j) = u_{i+1,j}$. Resulting in the following equation:
+\begin{equation}\label{eq:firstordertimeuse}
+    u_t \approx \frac{u_{i,j+1} - u_{i,j}}{\Delta t}.
+\end{equation}
+The spatial differential will be given by the second order forward Euler scheme, which is, when using the same notation as above, given as follows:
+\begin{equation}\label{eq:secondorderposuse}
+    \frac{\partial^2 u}{\partial x^2} = u_{xx} \approx \frac{u_{i+1,j} - 2u_{i,j} + u_{i-1,j}}{(\Delta x)^2}.
+\end{equation}
+If we now take the original equation given in equation \ref{eq:origexplicit}, and plug in equations \ref{eq:firstordertimeuse} and \ref{eq:secondorderposuse}, we get:
+\begin{equation}
+    \frac{u_{i+1,j} - 2u_{i,j} + u_{i-1,j}}{(\Delta x)^2} = \frac{u_{i,j+1} - u_{i,j}}{\Delta t}.
+\end{equation}
+Defining a variable $\alpha = \frac{\Delta t}{(\Delta x)^2}$, and rearranging the above expression to solve for the next time step $u_{i,j+1}$, we get:
+\begin{equation}\label{eq:explicitalgo}
+    u_{i,j+1} = \alpha u_{i-1,j} + (1-2\alpha)u_{i,j} + \alpha u_{i+1,j}.
+\end{equation}
+When we know the boundary conditions ($u_{0,j}$ and $u_{L,j}$ where $i \in [0,L]$), as well as the initial values ($u_{i,0}$), we have an explicit expression in equation \ref{eq:explicitalgo} to calculate $u_{i,j+1}$ using the known $u_{i,j}$ and $u_{i\pm1,j}$-values, hence the name "explicit" scheme.
+
+\subsubsection{Implicit Scheme}
+
+The implicit scheme is an implementation based on the usage of the backward-Euler algorithm. The time evolution is given by the standard first order backward Euler implementation:
+\begin{equation}\label{eq:timebackwards}
+    \frac{\partial u}{\partial t} = u_t \approx \frac{u_{i,j} - u_{i,j-1}}{\Delta t}.
+\end{equation}
+The spatial differential will be given by the second order backward Euler-scheme, which is:
+\begin{equation}\label{eq:spacebackwards}
+    \frac{\partial^2 u}{\partial x^2} = u_{xx} \approx \frac{u_{i+1,j} - 2u_{i,j} + u_{i-1,j}}{(\Delta x)^2}.
+\end{equation}
+If we now take equations \ref{eq:timebackwards} and \ref{eq:spacebackwards}, and plug these into equation \ref{eq:origexplicit}, we're left with the following expression:
+\begin{equation}\label{eq:almosttherebackwards}
+    \frac{u_{i+1,j} - 2u_{i,j} + u_{i-1,j}}{(\Delta x)^2} = \frac{u_{i,j} - u_{i,j-1}}{\Delta t}.
+\end{equation}
+Rearranging this expression, with the same defined constant $\alpha = \frac{\Delta t}{(\Delta x)^2}$ as in the explicit case, we can rearrange equation \ref{eq:almosttherebackwards} and solve for $u_{i,j-1}$:
+\begin{equation}\label{eq:backwardsalmostsol}
+    u_{i,j-1} = -\alpha u_{i-1,j}+(1-2\alpha)u_{i,j} - \alpha u_{i+1,j}
+\end{equation}
+This expression is not directly solvable, given that we need to know the next time step to calculate the previous one. Using some linear algebra, we can extract the solution from this. If we rewrite the right side of equation \ref{eq:backwardsalmostsol} in terms of a matrix-vector multiplication, we get:
+\begin{equation}\label{eq:implicitmatrixythingy}
+    \hat{U}_{j-1} = \begin{bmatrix} (1+2\alpha) & -\alpha & 0 & \cdots & 0\\ -\alpha & (1+2\alpha) & -\alpha & \ddots & \vdots\\0&-\alpha&(1+2\alpha)&\ddots&0\\\vdots&\ddots&\ddots&\ddots&-\alpha\\0&\cdots&0&-\alpha&(1+2\alpha)\end{bmatrix} \hat{U}_j.
+\end{equation}
+Given $i \in [0,L]$ and vectors $\hat{U}_{j-1}^T = [u_{0,j-1},\cdots,u_{L,j-1}]$ and $\hat{U}_j^T = [u_{0,j},\cdots,u_{L,j}]$. Renaming the matrix $\hat{A}$, we get the following matrix equation:
+\begin{equation}\label{eq:realdeal}
+    \hat{U}_{j-1} = \hat{A}\hat{U}_{j}.
+\end{equation}
+Multiplying this with the inverse matrix $A^{-1}$, we get: 
+\begin{equation}
+    \hat{U}_j = \hat{A}^{-1} \hat{U}_{j-1}.
+\end{equation}
+As such, to calculate the next time step, you simply need to invert the matrix $\hat{A}$. Extrapolating this so that $\hat{U}_{j-1} = \hat{A}^{-1}\hat{U}_{j-2}$, we finally get get:
+\begin{align*}
+    \hat{U}_j &= \hat{A}^{-1}\hat{U}_{j-1}.\\
+    \hat{U}_j &= \hat{A}^{-1}(\hat{A}^{-1}\hat{U}_{j-2}.\\
+    &\vdots\\
+    \hat{U}_j &= \hat{A}^{-j}\hat{U}_0.
+\end{align*}
+Here, $\hat{U}_0$ is the vector containing the initial condition of the system. Given that $\alpha$ is a constant that we set, we only need to invert the matrix once, and multiply this with the previous time step vector at any given time $\hat{U}_{j-1}$ to find the values at the next time step $\hat{U}_j$. We can also use the fact that the matrix $\hat{A}$ is tridiagonal, and when using a tridiagonal solver, we can greatly improve the performance for solving the sets of equation. Running a regular matrix-vector multiplication algorithm for a dense matrix, the standard methods runs as $\sim O(L^3)$, while when using a tridiagonal solver, the timing runs as $\sim O(L)$\footnote{The tridiagonal matrix solver that we are using is discussed further in the article 'A Numerical Analysis on Approximating a Second-Order Differential Equation': \url{https://github.com/adnvre/Fys3150/blob/master/Project1/Rapport_Project1.pdf} (A. Vrevic, K. Sæbjørnsen \& J.E. Ødegård).}, where $L$ is the amount of spatial steps that we've chosen. This tridiagonal solver solves a matrix-vector multiplication on the form:
+\begin{equation}
+    \hat{A}\hat{x} = \hat{b}
+\end{equation}
+where $\hat{A}$ is a known (symmetric, tridiagonal) matrix and $\hat{b}$ is a known vector. We have such a matrix-vector multiplication in equation \ref{eq:realdeal}, and as such we can use this solver in our problem at hand. This general tridiagonal solver uses the following three calculations to both invert the matrix and solve for the unknown quantities $\hat{x}$\footnote{These equations are listed on page 3 in the following article: 'A Numerical Analysis on Approximating a Second-Order Differential Equation’: \url{https://github.com/adnvre/Fys3150/blob/master/Project1/Rapport_Project1.pdf} (A. Vrevic, K. Sæbjørnsen & J.E. Ødegård)}:
+\begin{equation}\label{eq:tri1}
+    \Tilde{b}_i = b_i - \frac{e_{i-1}^2}{\Tilde{b}_{i-1}},
+\end{equation}
+\begin{equation}\label{eq:tri2}
+    \Tilde{g}_i = g_i - \frac{\Tilde{g}_{i-1}e_{i-1}}{\Tilde{b}_{i-1}},
+\end{equation}
+\begin{equation}\label{eq:tri3}
+    u_i = \frac{\Tilde{g}_i - e_i u_{i+1}}{\Tilde{b}_i},
+\end{equation}
+where $b_i$ are the individual diagonal elements, $e_i$ are the off-diagonal elements, $g_i$ are the function values at the previous time step, $\Tilde{g}_i$ and $\Tilde{b}_i$ are intermedio calculations used to find $u_i$, which is the unknown values we are looking for. 
+
+\subsubsection{Implicit Crank-Nicolson Scheme}
+
+If we implement the usage of both the forward- and backward-Euler algorithm with a Taylor-expansion around the time $t' = t + \frac{\Delta t}{2}$, we get what is known as the Crank-Nicolson scheme. The time-evolution for this scheme is given as:
+\begin{equation}\label{eq:CNtime}
+    \frac{\partial u}{\partial t} = u_t \approx \frac{u_{i,j+1} - u_{i,j}}{\Delta t}.
+\end{equation}
+The spatial derivative when using the Crank-Nicolson scheme is given as ($\frac{\partial^2 u}{\partial x^2} = u_{xx}$):
+\begin{equation}\label{eq:CNSpace}
+    u_{xx} \approx \frac{u_{i+1,j} - 2u_{i,j} + u_{i-1,j} + u_{i+1,j+1} - 2u_{i,j+1} + u_{i-1,j+1}}{2(\Delta x)^2}.
+\end{equation}
+Combining the approximations we've made in equations \ref{eq:CNtime} and \ref{eq:CNSpace}, with equation \ref{eq:origexplicit}, doing some restructuring of the equations and defining the same $\alpha$ as before ($\alpha = \frac{\Delta t}{(\Delta x)^2}$, we get the expression:
+\begin{equation}
+    \begin{split}
+    -\alpha u_{i-1,j}+(2+2\alpha)u_{i,j}-&\alpha u_{i+1,j} = \alpha u_{i-1,j-1} + \\&(2-2\alpha)u_{i,j-1} + \alpha u_{i+1,j-1}.
+    \end{split}
+\end{equation}
+This expression can further be written down in a matrix form as:
+\begin{equation}\label{eq:matrixequationCN}
+    (2\hat{I} + \alpha \hat{B})\hat{U}_j = (2\hat{I} - \alpha\hat{B})\hat{U}_{j-1}
+\end{equation}
+Where $\hat{I}$ is the identity matrix, $\hat{U}_j$ is the vector containing the results for the current time step and $\hat{U}_{j-1}$ is the vector containing the results from the previous time step. The matrix $\hat{B}$ is thus defined as:
+\begin{equation}
+    \hat{B} = \begin{bmatrix} 2&-1&0&\cdots&0\\-1&2&-1&\cdots&0\\0&-1&2&\ddots&0\\\vdots&\vdots&\ddots&\ddots&\ddots\\0&\cdots&\cdots&-1&2\end{bmatrix}.
+\end{equation}
+Multiplying the inverse of $(2\hat{I} + \alpha\hat{B})$ on both sides of equation \ref{eq:matrixequationCN} gives us an expression for the next time step:
+\begin{equation}
+    \hat{U}_{j} = (2\hat{I}+\alpha\hat{B})^{-1}(2\hat{I}-\alpha\hat{B})\hat{U}_{j-1}.
+\end{equation}
+If we simply define $\hat{U}_{j-1}' = (2\hat{I}-\alpha\hat{B})\hat{U}_{j-1}$, we see that we have the same type of problem as with the implicit scheme, and we can also solve this by using the tridiagonal (symmetric) solver method shown in equations \ref{eq:tri1}, \ref{eq:tri2} and \ref{eq:tri3}.
+
+\subsection{Numerical Stability \& Accuracy}
+
+For our calculations to return accurate results, we require that the spectral radius of a matrix representation of the given numerical method $\hat{A}$ is lower than or equal to 1. The spectral radius $\rho(\hat{A})$ is defined as:
+\begin{equation}
+    \rho(\hat{A}) = \text{max}\Big\{|\lambda|:\text{det}(\hat{A}-\lambda\hat{I}) = 0\Big\}.
+\end{equation}
+More commonly referred to as the maximum (absolute) value of the eigenvalues of the matrix. Mathematically speaking, the requirement that we need to satisfy is the following:
+\begin{equation}
+    \rho(\hat{A}) \leq 1.
+\end{equation}
+We will be looking at the explicit and implicit schemes both on their own.
+
+\subsubsection{Explicit Scheme}
+
+For the explicit scheme, the algorithm is as stated in equation \ref{eq:explicitalgo} given as:
+\begin{equation}
+    u_{i,j+1} = \alpha u_{i-1,j} + (1-2\alpha)u_{i,j} + \alpha u_{i+1,j}.    
+\end{equation}
+Having $\hat{U}_{j+1}^T = [u_{0,j+1},\cdots,u_{L,j+1}]$ and $\hat{U}_{j}^T = [u_{0,j},\cdots,u_{L,j}]$, we can rewrite this on matrix form:
+\begin{equation}
+    \hat{U}_{j+1} = \begin{bmatrix} (1-2\alpha)&\alpha&0&\cdots&0\\\alpha&(1-2\alpha)&\alpha&\ddots&\vdots\\0&\alpha&(1+2\alpha)&\ddots&0\\\vdots&\ddots&\ddots&\ddots&\alpha\\0&\cdots&0&\alpha&(1-2\alpha) \end{bmatrix}\hat{U}_{j}.
+\end{equation}
+Where we rename this matrix $\hat{A}$. we can observe that we further can rewrite the matrix as:
+\begin{equation}\label{eq:matrixmultiplicationthingy}
+\hat{A} = \hat{I} - \alpha\hat{B},
+\end{equation}
+where $\hat{I}$ is the identity matrix, and $\hat{B}$ is given as the following tridiagonal matrix:
+\begin{equation}\label{eq:tridigBhat}
+    \hat{B} = \begin{bmatrix} 
+    2&-1&0&\cdots&0\\
+    -1&2&-1&\ddots&\vdots\\
+    0&-1&2&\ddots&0\\
+    \vdots&\ddots&\ddots&\ddots&-1\\
+    0&\cdots&0&-1&2
+    \end{bmatrix}.
+\end{equation}
+The eigenvalues for the identity matrix is always equal to 1, meaning the the eigenvalues for the matrix $\hat{A}$ given in equation \ref{eq:matrixmultiplicationthingy} is given as $\lambda_i = 1-\alpha\mu_i$, where $\mu$ are the eigenvalues to matrix $\hat{B}$ given in equation \ref{eq:tridigBhat}. The eigenvalues to a general $N\times N$, symmetric, tridiagonal matrix with diagonal elements $a$ and off-diagonal elements $b$ is given as\footnote{This equation is found in Project 2 in the course 'FYS3150 - Computational Physics' at the University of Oslo, at the following URL: \url{http://compphysics.github.io/ComputationalPhysics/doc/Projects/2019/Project2/pdf/Project2.pdf} (Morten Hjorth-Jensen, 2019)}:
+\begin{equation}\label{eq:muieigenvalues}
+    \mu_i = a+2b\cos{\Big(\frac{i\pi}{N+1}\Big)}\;,\;i\in\{1,\cdots,N\}.
+\end{equation}
+Inserting this expression for $\mu_i$, we have that the eigenvalues for our matrix $\hat{A}$ will be:
+\begin{equation}\label{eq:plsbelow}
+    \lambda_i = 1-2\alpha\Big[1-\cos{\Big(\frac{i\pi}{N+1}\Big)}\Big]
+\end{equation}
+Since the spectral radius $\rho(\hat{A}) = \text{max}\{|\lambda_i|\}$, we need to figure out the requirement on $\alpha$ so that the spectral radius will remain below 1. Having the iterative variable $i \in \{1,\cdots,N\}$, gives us that the cosine will take on only negative values with amplitude up to $\cos{(\theta)} = -1$. This means that the maximum (absolute) value of this expression is reached at $\cos{(\theta)} = -1$, which gives us the following limitation on $\alpha$:
+\begin{equation}\label{eq:lambmax}
+    |\lambda_{max}| = |1-2\alpha\big(1+1\big)| = |1-4\alpha| \leq 1.
+\end{equation}
+The statement in equation \ref{eq:lambmax} is true whenever we have $\alpha \leq \frac{1}{2}$. Since $\alpha = \frac{\Delta t}{(\Delta x)^2}$, we therefore get the following limitation on our choice of time step $\Delta t$ coupled with our choice in spatial steps $\Delta x$:
+\begin{equation}\label{eq:stabilityrequirement}
+    \frac{\Delta t}{(\Delta x)^2} \leq \frac{1}{2}
+\end{equation}
+This is an unfortunate numerical limitation, considering that a doubling of the number of positions we would like to analyze would result in having to do 4 times as many time steps to make sure that we have the stability requirement met.
+\\
+\\
+The spatial error of this method runs as $\mathcal{O}(\Delta x^2)$, while the temporal error runs as $\mathcal{O}(\Delta t)$\footnote{M. Hjorth-Jensen, Lecture notes in Computational Physics, University of Oslo (2013), p. 305. Course URL: \url{https://www.uio.no/studier/emner/matnat/fys/FYS3150/index-eng.html}}. This means that the accuracy will increase faster when increasing the amount of spatial points, as opposed to temporal ones. Taking into account the stability requirement from equation \ref{eq:stabilityrequirement}, we see that we have to strike a balance between the amount of points spatially and temporally when considering accuracy and CPU run time.
+
+
+\subsubsection{Implicit Scheme}
+
+For the implicit scheme, we already have a matrix representation for the system given in equation \ref{eq:implicitmatrixythingy} as:
+\begin{equation}
+    \hat{A} = \begin{bmatrix} (1+2\alpha) & -\alpha & 0 & \cdots & 0\\ -\alpha & (1+2\alpha) & -\alpha & \ddots & \vdots\\0&-\alpha&(1+2\alpha)&\ddots&0\\\vdots&\ddots&\ddots&\ddots&-\alpha\\0&\cdots&0&-\alpha&(1+2\alpha)\end{bmatrix}
+\end{equation}
+We can rewrite this on the same form as in the previous section as:
+\begin{equation}
+    \hat{A} = \hat{I} + \alpha\hat{B}
+\end{equation}
+where $\hat{B}$ is the same matrix as in equation \ref{eq:tridigBhat}. This has eigenvalues given as $\lambda_i = 1+\alpha\mu_i$, with $\mu_i$ given with the same expression as in equation \ref{eq:muieigenvalues}. This in turn gives us the full eigenvalues as:
+\begin{equation}
+    \lambda_i = 1 + 2\alpha\Big[1+\cos{\Big(\frac{i\pi}{N+1}}\Big)\Big]
+\end{equation}
+This Cosine can still only obtain negative values, which gives us the spectral radius maximum when $\cos{(\theta)} = 0$, giving us the following expression for $|\lambda_{max}|$:
+\begin{equation}
+    |\lambda_{max}| = |1-2\alpha(1-1)| = |1| \leq 1
+\end{equation}
+This statement is true for any choice of $\alpha$, and as such we are free to pick any values for $\Delta t$ and $\Delta x$ when using this method, and as such we don't have the same limitations as with the explicit scheme.
+\\
+\\
+The spatial and temporal error using this method runs as the same as with the explicit method, with the temporal given as $\mathcal{O}(\Delta t)$ and the spatial as $\mathcal{O}(\Delta x^2)$\footnote{M. Hjorth-Jensen, Lecture notes in Computational Physics, University of Oslo (2013), p. 312, table 10.1. Course URL: \url{https://www.uio.no/studier/emner/matnat/fys/FYS3150/index-eng.html}}. Considering that we don't have the same limitations as with the explicit method regarding the ratio between the time step and spatial step, this method is a much more forgiving scheme numerically speaking.
+\\
+\\
+As we can see from equations \ref{eq:matrixequationCN}, we have the same sign convention for the Crank-Nicolson scheme as with the implicit scheme. As such, we can deduct the same stability results from the Crank-Nicolson scheme as with the implicit scheme, and that is we are free to choose $\Delta x$ and $\Delta t$ as we like. The error using this method runs as $\mathcal{O}(\Delta t^2)$ for the temporal part and $\mathcal{O}(\Delta x^2)$ for the spatial part. Meaning that this method is more temporally accurate compared to the implicit and explicit counterparts.
+
+\subsubsection{Error calculations}
+
+To calculate the error in our different methods, we will use a finite difference scheme, which is given as:
+\begin{equation}\label{eq:ErrorCalculation}
+    \epsilon(t) = \frac{\sqrt{\sum\limits_{i=1}^{N-1} |u(x_i,t_j) - f(x_i,t_j)|^2 }}{\sqrt{\sum_{i=1}^{N-1} f(x_i,t_j)^2}}.
+\end{equation}
+Here, $u(x_i,t_j)$ is the numerically calculated result, while $f(x_i,t_j)$ is the steady state analytic result, given by equation \ref{eq:linearexpectation} in 1 dimension. The sums run from $i = \{1,\cdots,N-1\}$. Given that the boundary values are set, these are ignored. Equation \ref{eq:ErrorCalculation} will therefore be our measurement on the error of the 1D-system.
+
+\subsection{Extension to 2 Dimensions} \label{sec:2D}
+
+If we are to expand this problem to two dimensions, we need to look back at equation \ref{eq:ognabla}, and write the spatial gradient in two dimensions:
+\begin{equation}\label{eq:2Danalytic}
+    \frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2} = \frac{\partial u}{\partial t}
+\end{equation}
+Where $u$ now is a function of two spatial dimensions $x$ and $y$, as well as a temporal dimension $t$. When extending our numerical methods into two dimensions, we will be using the explicit scheme due to its overall simplicity of implementing.
+
+\subsubsection{Two-dimensional Explicit Scheme Algorithm}
+
+Using the explicit method, we can simply extend our method into two dimensions in a straight forward manner. We first rewrite the variable $u$ in a discretized manner: $u(x,y,t) \rightarrow u(x_i,y_j,t_k) = u_{i,j,k}$. If we now replace the spatial derivatives with the standard double forward Euler method, as given in equation \ref{eq:secondorderposuse}, and the temporal derivative with the forward Euler method given in equation \ref{eq:firstordertimeuse}, we can rewrite equation \ref{eq:2Danalytic} in the following manner:
+\begin{equation}
+    \begin{split}
+    &\frac{u_{i+1,j,k} - 2u_{i,j,k} + u_{i-1,j,k}}{(\Delta x)^2} + \frac{u_{i,j+1,k} - 2u_{i,j,k} + u_{i,j-1,k}}{(\Delta y)^2}\\ &= \frac{u_{i,j,k+1} - u_{i,j,k}}{\Delta t}.
+    \end{split}
+\end{equation}
+For simplicity's sake, we will work with a square spatial grid when solving these equations, giving us $\Delta x = \Delta y = h$, where we define $h$ as being the spatial step size. This gives us the equation on the form:
+\begin{equation}
+    \begin{split}
+    &\frac{u_{i+1,j,k} - 2u_{i,j,k} + u_{i-1,j,k} + u_{i,j+1,k} - 2u_{i,j,k} + u_{i,j-1,k}}{h^2}\\ &= \frac{u_{i,j,k+1} - u_{i,j,k}}{\Delta t}.
+    \end{split}
+\end{equation}
+Defining the variable $\alpha = \frac{\Delta t}{h^2}$, we can solve this for the next time step $u_{i,j,k+1}$, which results in a differential equation on the form:
+\begin{equation}\label{eq:2Dalgothistime}
+    \begin{split}
+    u_{i,j,k+1} &= u_{i,j,k} + \alpha\Big[ u_{i+1,j,k} + u_{i-1,j,k}\\ &+ u_{i,j+1,k} + u_{i,j-1,k} - 4u_{i,j,k} \Big]
+    \end{split}
+\end{equation}
+We therefore have an explicit algorithm now given in equation \ref{eq:2Dalgothistime}. We also need to look closer at the numerical stability requirements of this algorithm given by the spectral radius.
+
+\subsubsection{Two-dimensional Explicit Scheme Limitations}
+
+To start off, we can split up all the contributions to the "y-direction matrix" and the "x-direction matrix" each on their own. We can therefore rewrite equation \ref{eq:2Dalgothistime} on the following form:
+\begin{equation}\label{eq:midlertidig2dalgo}
+    \begin{split}
+    u_{i,j,k+1} &= u_{i,j,k} + \alpha\Big[ u_{i+1,j,k} + u_{i-1,j,k} - 2u_{i,j,k}\Big]\\ &+ \alpha\Big[u_{i,j+1,k} + u_{i,j-1,k} - 2u_{i,j,k} \Big].
+    \end{split}
+\end{equation}
+From equation \ref{eq:midlertidig2dalgo}, we can rewrite this on matrix form:
+\begin{equation}\label{eq:soonthiswillbeheat}
+    \hat{U}_{k+1} = \Big[\hat{I} - \alpha\hat{B} - \alpha\hat{B}^T\Big]\hat{U}_{k}.
+\end{equation}
+Where $\hat{U}_{k+1}$ is the matrix containing all spatial elements for time step $k+1$, $\hat{U}_k$ is the matrix containing all spatial elements for time step $k$, and $\hat{B}$ is the same matrix as defined in equation \ref{eq:tridigBhat}. Since $\hat{B}$ is symmetric, we also have that $\hat{B}^T = \hat{B}$, so we can further rewrite this as:
+\begin{equation}\label{eq:thefirst}
+    \hat{U}_{k+1} = \Big[\hat{I} - 2\alpha\hat{B}\Big]\hat{U}_{k}  .  
+\end{equation}
+Renaming this matrix $\hat{A} = \hat{I} - 2\alpha\hat{B}$, we can now try to figure out what its eigenvalues are. We know that the identity matrix $\hat{I}$ has all eigenvalues 1, and from equation \ref{eq:muieigenvalues} we have the eigenvalues of $\hat{B}$ given as:
+\begin{equation}
+    \lambda_{B} = 2-2\cos{\Big(\frac{i\pi}{N+1}\Big)}\;,\;i\in\{1,\cdots,N\}
+\end{equation}
+Inserting this gives us the full eigenvalues as:
+\begin{equation}\label{eq:idkwhattocalltheseanymore}
+    \lambda_i = 1 - 2\alpha\Big[2-2\cos{\Big(\frac{i\pi}{N+1}\Big)}\Big].
+\end{equation}
+As before, $\cos{(\theta)} \in (-1,1)$, and equation \ref{eq:idkwhattocalltheseanymore} reaches its (absolute) maximum when $\cos{(\theta)} = -1$, we replace the cosine with this value to get:
+\begin{equation}
+    |\lambda_{max}| = |1-4\alpha[1+1]| = |1-8\alpha|.
+\end{equation}
+Since we require that $\rho(\hat{A}) = |\lambda_{max}| < 1$, we therefore solve this for $\alpha$:
+\begin{equation}\label{eq:thefinal}
+    |1-8\alpha| < 1 \implies \alpha < \frac{1}{4}.
+\end{equation}
+Since $\alpha = \frac{\Delta t}{h^2}$, this means that we impose the following restrictions on the relationship between our temporal and spatial steps:
+\begin{equation}
+    \frac{\Delta t}{h^2} \leq \frac{1}{4}.
+\end{equation}
+A nice thing to note is that we could also expand this using the implicit schemes, but this requires us to include an iterative method (like the Jacobi iterative method) for solving these problems\footnote{M. Hjorth-Jensen, Lecture notes in COmputational Physics, University of Oslo (2013), p. 66, section 6.6. Course URL: \url{https://www.uio.no/studier/emner/matnat/fys/FYS3150/index-eng.html}.}. We will however resort to using the explicit method in 2 dimensions, and this will therefore not be further discussed.
+
+\subsection{Discretizing the Heat Equation}
+
+\subsubsection{Finding the algorithm}
+
+We have the heat equation given in equation \ref{eq:actuallyheatyo} as:
+\begin{equation}
+    \Bigg[\frac{\partial^2 T}{\partial x^2} + \frac{\partial^2 T}{\partial y^2}\Bigg] + \frac{Q}{k} = \frac{\rho c_p}{k} \frac{\partial T}{\partial t}.
+\end{equation}
+We have the temperature $T$ as a function of two spatial and one temporal variable. Discretizing this gives us $T(x,y,t) \rightarrow T(x_i,y_j,t_k) = T_{i,j,k}$. Solving the differentials using the explicit method as discussed in section \ref{sec:2D}, we get the following equation:
+\begin{equation}
+    \begin{split}
+        &\frac{T_{i+1,j,k} + T_{i-1,j,k} + T_{i,j+1,k} + T_{i,j-1,j} - 4T_{i,j,k}}{h^2}\\ &= \frac{\rho c_p}{k}\frac{T_{i,j,k+1} - T_{i,j,k}}{\Delta t} - \frac{Q}{k}
+    \end{split}
+\end{equation}
+Solving this for $T_{i,j,k+1}$ gives us the following:
+\begin{equation}\label{eq:longshit}
+    \begin{split}
+        &\frac{k\Delta t\Big[T_{i+1,j,k} + T_{i-1,j,k} + T_{i,j+1,k} + T_{i,j-1,j} - 4T_{i,j,k}\Big]}{\rho c_ph^2}\\ &+ \frac{Q\Delta t}{\rho c_p} + T_{i,j,k} = T_{i,j,k+1}
+    \end{split}
+\end{equation}
+This is the equation that we will have to solve numerically. We have already defined the boundary conditions in the y-direction of the model ($T(y=0) = 7^o\text{C}$ and $T(y=L_{y}) = 1300^o\text{C}$ for $y\in[0,L_{y}]$), as well as starting with the initial condition for the rest of the system as being $0$. As for the boundary conditions in the x-direction, we will be using periodic boundary conditions. This is modelled such that the temperature at $x=0$ will be adjacent to the temperature at $x=L$ for $x\in[0,L_{x}]$. Since we don't expect the lithosphere outside our given model to behave any differently to the lithosphere within our model, this is a valid way of simulating the boundary conditions in the x-boundaries.
+\\
+\\
+Considering that we are solving this system using an explicit scheme, we need to figure out the numerical limit to equation \ref{eq:longshit} given by its spectral radius next.
+
+\subsubsection{Finding the limitations}
+
+Just like in section \ref{sec:2D}, we will have to rewrite our equation \ref{eq:longshit} on matrix form. Firstly, we define the following relation:
+\begin{equation}
+    \beta = \frac{k\Delta t}{\rho c_p h^2}.
+\end{equation}
+With this in hand, we can rewrite the equation as follows:
+\begin{equation}
+    \begin{split}
+    &\beta\Big[T_{i+1,j,k} + T_{i-1,j,k} + T_{i,j+1,k} + T_{i,j-1,j} - 4T_{i,j,k}\Big]\\ &+ \frac{Q\Delta t}{\rho c_p} + T_{i,j,k} = T_{i,j,k+1}.
+    \end{split}
+\end{equation}
+Doing a simple rewriting, we turn this equation into:
+\begin{equation}
+    \begin{split}
+        T_{i,j,k+1} &= \frac{Q\Delta t}{\rho c_p} + T_{i,j,k} + \beta\Big[T_{i+1,j,k} + T_{i-1,j,k} - 2T_{i,j,k}\Big]\\ &+ \beta\Big[T_{i,j+1,k} + T_{i,j-1,k} - 2T_{i,j,k}\Big].
+    \end{split}
+\end{equation}
+We can rewrite this on matrix form as follows (just like in the case in equation \ref{eq:soonthiswillbeheat}:
+\begin{equation}
+    \hat{T}_{k+1} = \frac{Q\Delta t}{\rho c_p} + \Big[\hat{I} - \beta\hat{B} - \beta\hat{B}^T\Big]\hat{T}_{k}.
+\end{equation}
+Here, the matrix $\hat{B}$ is the same as the matrix in equation \ref{eq:tridigBhat}, and as it is symmetric, we can simplify this further into simply being:
+\begin{equation}
+    \hat{T}_{k+1} = \frac{Q\Delta t}{\rho c_p} + \Big[\hat{I} - 2\beta\hat{B}\Big]\hat{T}_{k}
+\end{equation}
+Renaming $\hat{A} = \hat{I} - 2\beta\hat{B}$, we need to find its spectral radius. We have already discussed a similar system in equations \ref{eq:thefirst}-\ref{eq:thefinal}, meaning that we know the limitation on our parameter $\beta$ to be the following:
+\begin{equation}
+    \beta \leq \frac{1}{4}.
+\end{equation}
+Inserting for the full expression of $\beta$, we get the full limitation on the spatial and temporal steps together to be:
+\begin{equation}\label{eq:limittooo}
+    \frac{k\Delta t}{\rho c_p h^2} \leq \frac{1}{4} \implies \frac{\Delta t}{h^2} \leq \frac{\rho c_p}{4k}.
+\end{equation}
+Which is the limit we have to work with to make sure that we have receive stable, numerical results. Solving equation \ref{eq:limittooo} for $\Delta t$, we get:
+\begin{equation}
+    \Delta t \leq \frac{\rho c_p h^2}{4k}.
+\end{equation}
+Inserting for $\rho = 3.5\cdot10^{12} \; \frac{\text{kg}}{{km}^3}$, $c_p = 1000\;\frac{\text{W s}}{\text{kg} ^o \text{C}}$, $h = 1\;\text{km}$ and $k = 2500\;\frac{\text{W}^o\text{C}}{\text{km}}$, this gives us:
+\begin{equation}
+    \Delta t \leq 3.5\cdot10^{11}\;\text{s} \approx 11.091\;\text{ky}, 
+\end{equation}
+Where "ky" indicates "Kiloyears". We will here model the step size $h$ as being $h = 1\;\text{km}$, and by modelling this as a $120\;\text{km}$ deep and $350\;\text{km}$ wide "box", this results in a [$351\times121$]-grid. We will for simplicity set $\Delta t = 10\;\text{ky}$, meaning that we will for a full gigayear-simulation do $10^5$ time steps. Finally, we will plan to do three separate simulations:
+\begin{itemize}
+    \item One where we don't have radioactive enrichment of the mantle.
+    \item One with radioactive enrichment of the mantle, disregarding the radioactive decay.
+    \item One with radioactive decay in the picture.
+\end{itemize}
+
+\newpage
+
+\section{Results}
+
+The results will be split up into 3 parts. First we will present the results for the 1D runs, using the explicit, implicit and Crank-Nicolson schemes respectively. We will then be presenting the two-dimensional run using the explicit scheme. We will finally be presenting the results for the model of the temperature distribution of the lithosphere.
+
+\subsection{Unitless 1 Dimensional}
+
+\subsubsection{Explicit Scheme}
+
+In figure \ref{fig:1Dexplicit}, we can see a visualization of the results we have gotten by running the explicit algorithm. The difference of
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.45]{fig1proj5.png}
+    \includegraphics[scale=0.45]{fig2proj5.png}
+    \caption{The results for running the explicit scheme with boundary conditions $u(x=0,t) = 0$ and $u(x=1,t) = 1$. Time on the x-axis, position on the y axis, and amplitude / function value represented by the color bar. The top figure represents a 11-point simulation with $\Delta x = 0.1$, while the bottom has 101 points and $\Delta x = 0.01$. As we can see, the plots on their own look pretty similar. The bottom figure has, as a result of having a smaller $\Delta x$, a greater resolution than the top figure. We also observe that after a given relaxation time, that the plots seem to form a linear relationship between the two boundaries.}
+    \label{fig:1Dexplicit}
+\end{figure}
+
+To further illustrate the linearity of the steady state, as well as the "movement" of the function towards the steady state, I have created a GIF. This GIF can be found by clicking on the following URLs:
+\begin{itemize}
+    \item For $\Delta x = 0.1$: \href{https://github.com/Jan-Egil/FYS3150/blob/master/Project5/Project5/GIF/expdelx10.gif}{Click here.} (Links to GitHub)
+    \item For $\Delta x = 0.01$: \href{https://github.com/Jan-Egil/FYS3150/blob/master/Project5/Project5/GIF/expdelx100.gif}{Click here.} (Links to GitHub)
+\end{itemize}
+
+In general, we can see that these both (qualitatively) converge towards a linear state as expected.
+
+\subsubsection{Implicit Scheme}
+
+In figure \ref{fig:1Dimplicit}, we have the visualization of the results after running the implicit algorithm, with both time, position and function value represented.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.45]{imp1d10.png}
+    \includegraphics[scale=0.45]{imp1d100.png}    
+    \caption{The results for running the implicit scheme with boundary conditions $u(x=0,t) = 0$ and $u(x=1,t) = 1$. Time is on the x-axis, position on the y-axis and amplitude / function value is represented by the color bar. The top figure represents a 11-point simulation with $\Delta x = 0.1$, while the bottom has 101 points and $\Delta x = 0.01$. As we can see, the plots look pretty similar, whereas the bottom plot will have a greater resolution compared to the top plot due to the smaller $\Delta x$.}
+    \label{fig:1Dimplicit}
+\end{figure}
+
+\newpage
+
+To further illustrate the linearity of the steady state for the implicit scheme, as well as the "movement" towards the steady state, the following GIFs are linked:
+\begin{itemize}
+    \item For $\Delta x = 0.1$: \href{https://github.com/Jan-Egil/FYS3150/blob/master/Project5/Project5/GIF/impdelx10.gif}{Click here}. (Links to GitHub)
+    \item For $\Delta x = 0.01$: \href{https://github.com/Jan-Egil/FYS3150/blob/master/Project5/Project5/GIF/impdelx100.gif}{Click here}. (Links to GitHub)
+\end{itemize}
+
+A more in-depth look to the steady state of this system can be seen in figure \ref{fig:1Dimplicitsteady}. Here, we can visually see that the steady state of the system for $\Delta x = 0.1$ is slightly perturbed away from being perfectly linear. We can't see a similar inaccuracy for the $\Delta x = 0.01$, but we can expect there exists a similar, yet smaller inaccuracy.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.45]{figwdent.png}
+    \includegraphics[scale=0.45]{figwodent.png}    
+    \caption{The steady state of the implicit schemes. $\Delta x = 0.1$ for the top plot, $\Delta x = 0.01$ for the bottom plot. We can visually see a slight "dent" in the top plot, indicating a deviation, and as such, an inaccuracy in this method. }
+    \label{fig:1Dimplicitsteady}
+\end{figure}
+
+\newpage
+
+\subsubsection{Implicit Crank-Nicolson Scheme}
+
+In figure \ref{fig:CN1DWORKS}, we have the visualization of the results after running the implicit Crank-Nicolson scheme, with both time, position and function value represented.
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.45]{CN1.png}
+    \includegraphics[scale=0.45]{CN2.png}    
+    \caption{The results from running the implicit Crank-Nicolson scheme with similar boundary conditions as the other ones ($u(x=0,t) = 0$ and $u(x=1,t) = 1$). Time on the x-axis, position on the y-axis, and amplitude / function value represented by the color bar. The top figure represents a 11-point simulation with $\Delta x = 0.1$, while the bottom is a 101-point simulation with $\Delta x = 0.01$. As with the other plots, there are more or less no difference between these plots.}
+    \label{fig:CN1DWORKS}
+\end{figure}
+
+To further illustrate the linear steady state, as well as the time evolution for the Crank Nicolson scheme, see the following GIFs:
+\begin{itemize}
+    \item For $\Delta x = 0.1$: \href{https://github.com/Jan-Egil/FYS3150/blob/master/Project5/Project5/GIF/CNdelx10.gif}{Click here}. (Links to GitHub)
+    \item For $\Delta x = 0.01$: \href{https://github.com/Jan-Egil/FYS3150/blob/master/Project5/Project5/GIF/CNdelx100.gif}{Click here}. (Links to GitHub)
+\end{itemize}
+
+\newpage
+
+\subsubsection{Comparing Efficiency and Accuracy}
+
+In table \ref{tab:timespent}, we see the run times of the different schemes for $\Delta x = 0.1$ and $\Delta x = 0.01$ respectively. For these runs, we've chosen to have just as many time steps as the stability criteria of the explicit scheme allows us (given by $\frac{\Delta t}{(\Delta x)^2} \leq \frac{1}{2}$ for the 1-dimensional case).
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{|c|c|c|}
+        \hline 
+         Method&$\Delta x = 0.1$&$\Delta x = 0.01$\\
+         \hline \hline
+         Explicit&$\approx 2\;\text{ms}$&$838.4\;\text{ms}$\\
+         Implicit&$\approx 3\;\text{ms}$&$930.8\;\text{ms}$\\
+         Crank-Nicolson&$\approx 3.5\;\text{ms}$&$1127.82\;\text{ms}$\\
+         \hline
+    \end{tabular}
+    \caption{Comparing the time spent doing all three algorithms for $\Delta x = 0.1$ and $\Delta x = 0.01$ respectively. The results are comparable since we've also put the same limitation to the $\Delta t$ values for both simulations, giving us just as many integration points for both methods. For the runs with '$\approx$', the run times are approximate, given that the run times varied significantly around said value.}
+    \label{tab:timespent}
+\end{table}
+
+From table \ref{tab:timespent}, we can see that the explicit scheme is slightly more efficient than its implicit counterparts. Further, we can see in figure \ref{fig:errorfigure}, we can see the (logarithm) of the error in our methods using the finite difference scheme shown in equation \ref{eq:ErrorCalculation}.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.43]{error2.png}
+    \includegraphics[scale=0.43]{error1.png}
+    \caption{Error calculations using the finite difference scheme. Top plot for the system with $\Delta x = 0.1$, bottom plot for the system with $\Delta x = 0.01$.}
+    \label{fig:errorfigure}
+\end{figure}
+
+\newpage
+
+\subsection{Unitless 2 Dimensional}
+
+For the runs of the 2-dimensional PDE-solver, we've used the boundary conditions where the top and bottom have constant boundary conditions set at 1. ($u(x,y=0,t) = u(x,y=1,t) = 1$). The right and left boundaries are set to 0. ($u(x=0,y,t) = u(x=1,y,t) = 0$). The corners where these boundaries intersect are also set to 1. For the 2 dimensional case, the explicit scheme has been solely used to calculate the values $u(x,y,t)$.
+
+\subsubsection{Step Size $\Delta x = \Delta y = 0.1$}
+
+In figure \ref{fig:2dfigures1}, we can see the results of the diffusion taking place in the first few instances after the simulation has started. We can see that the higher values are starting to distribute across the canvas.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.38]{2dfig1.png}
+    \includegraphics[scale=0.38]{2dfig2.png}    
+    \caption{A selection of time steps of results from running the explicit scheme for the 2 dimensional simulation. The top plot gives us the values of $u(x,y,t)$ at the initial time $t = 0$, while the bottom plot gives us the distribution at a time $t = 3\Delta t$ a short while later.}
+    \label{fig:2dfigures1}
+\end{figure}
+
+In figure \ref{fig:2dfigures2}, we see the results of the diffusion taking place at some later time when the system is approaching the steady state.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.40]{2dfig3.png}
+    \includegraphics[scale=0.40]{2dfig4.png}    
+    \caption{A selection of time steps of results from running the explicit scheme for the 2 dimensional simulation. The top plot gives us the values of $u(x,y,t)$ at time $t = 20\Delta t$, when the system is closing in on getting into a steady state. The bottom plot shows us at a sufficiently late time step $t \rightarrow \infty$, where the system has hit a steady state.}
+    \label{fig:2dfigures2}
+\end{figure}
+
+Purely qualitatively, we can say that the system in question for $\Delta x = \Delta y = 0.1$ reaches the steady state after $\approx 200\Delta t$.
+\\
+\\
+For a GIF simulating this system, \href{https://github.com/Jan-Egil/FYS3150/blob/master/Project5/Project5/GIF/expdelxy10.gif}{Click here.} (Links to GitHub)
+
+\newpage
+
+\subsubsection{Step Size $\Delta x = \Delta y = 0.01$}
+
+In figure \ref{fig:2dfigures3}, we see a visualization of the results of running the explicit algorithm for the PDE with $\Delta x = \Delta y = 0.01$. We can see that the higher values are starting to distribute across the canvas here as well, but at a slower rate as compared to the case in figure \ref{fig:2dfigures1}.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.38]{2dfig5.png}
+    \includegraphics[scale=0.38]{2dfig6.png}    
+    \caption{A selection of time steps of results from running the explicit scheme for the 2 dimensional simulation. The top plot gives us the values of $u(x,y,t)$ at the initial time $t = 0$, while the bottom plot gives us the distribution at a time $t = 30\Delta t$ a short while later.}
+    \label{fig:2dfigures3}
+\end{figure}
+
+In figure \ref{fig:2dfigures4}, we see the same results as in figure \ref{fig:2dfigures3}, but even later into the simulation when it is closing into the steady state.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.38]{2dfig7.png}
+    \includegraphics[scale=0.38]{2dfig8.png}    
+    \caption{A selection of time steps of results from running the explicit scheme for the 2 dimensional simulation. The top plot gives us the values of $u(x,y,t)$ at time $t = 200\Delta t$, when the system is closer to reaching the steady state. The bottom plot gives us the distribution at a time $t \rightarrow\infty$, at a time when we most definitely has reached the steady state.}
+    \label{fig:2dfigures4}
+\end{figure}
+
+Purely qualitatively, we can say that this system with $\Delta x = \Delta y = 0.01$ reaches the steady state after $\approx 4000\Delta t$. Considering that this system is notoriously slow to make into a GIF, as well as this only being a higher-resolution run of the previous simulation, I will not be making this into a GIF.
+
+\newpage
+.
+\newpage
+\subsection{Lithosphere Results}
+
+The results of running the heat equation simulation as already discussed can be seen in figure \ref{fig:failedlitho}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.45]{Nothi.png}
+    \caption{Results for running the lithosphere simulation. These results are inconclusive, and the temperature values of the lithosphere never grew any particularly. (Within the lithosphere, the values stayed at roughly $\sim 10^{-15}$ at most as a steady state, indicating a flaw in our calculations.}
+    \label{fig:failedlitho}
+\end{figure}
+
+
+In figure \ref{fig:failedlitho}, we see temperature as the colors within a canvas with the x-values being scaled to $\Tilde{x} = x/L_{x}$ and the y-values scaled to $\TIlde{y} = y/L_{y}$, with $L_{x} = 350\;\text{km}$ and $L_{y} = 120\;\text{km}$. What we see here is a pretty homogeneous distribution of temperature, with all of the temperatures lying at around $\sim 10^{-15}\;^o\text{C}$. (The color bar is not visible, due to bug in plotting program denying the usage of color bars). Due to the lithosphere simulation never converging to a steady state, Any other work on trying to model the radioactive enrichment of the upper mantle was postponed due to not getting accurate results.
+
+\newpage
+
+\section{Discussion}
+
+This discussion will be promptly split between the unitless numerical solution to a PDE, and the lithosphere heat equation system.
+
+\subsection{Dimensionless, General PDE}
+
+The dimensionless discussion will be split between the 1-dimensional and 2-dimensional runs.
+
+\subsubsection{1 Spatial Dimension PDE}
+
+For the unitless, 1 dimensional simulation, we have the results as seen in figures \ref{fig:1Dexplicit}-\ref{fig:CN1DWORKS}, as well as in table \ref{tab:timespent} and figure \ref{fig:errorfigure}.
+\\
+\\
+The general expected behaviour of a 1-dimensional function as it reached a steady state is a linear relation between the two boundary conditions, as stated in equation \ref{eq:linearexpectation}. Looking at the steady state of our simulation (either in the GIFs, or purely qualitatively in the color plots of figures \ref{fig:1Dexplicit}, \ref{fig:1Dimplicit} or \ref{fig:CN1DWORKS}, that we in all cases get a steady state linear relation. In figure \ref{fig:1Dimplicitsteady} for the implicit method, it is apparent that the steady state is linear, as expected. This can in turn be a sign of our simulation returning sensible results.
+\\
+\\
+One way of determining the validity of our results is to have a comparative look between the different methods. Looking at figures \ref{fig:1Dexplicit}, \ref{fig:1Dimplicit} and \ref{fig:CN1DWORKS}, we see that for any choice of method and any choice of $\Delta x$ (with $\Delta t$ dictated by the explicit algorithm's limitation), the evolution towards the steady state, which we can call the systems' "relaxation time", looks more or less perfectly similar. The fact that we get similar results when we use different independent methods on identical systems can further confirm the fact that our results are sensible and as expected.
+\\
+\\
+Looking at steady state for the implicit scheme in figure \ref{fig:1Dimplicitsteady}, we can clearly see a "dent" in the $\Delta x = 0.1$ run, where the steady state that has been reached isn't perfectly linear, but slightly curved near the bottom values. Looking at the corresponding GIF, it is apparent that this method "overshoots" the correct analytic value, and doesn't stabilize perfectly. This is not directly apparent in the $\Delta x = 0.01$ run, and is likely a global error which shrinks quickly. However, a more thorough error analysis of this system should be done to quantify the observed deviation.
+\\
+\\
+Looking at table \ref{tab:timespent}, we see that in a simulation given equal amount of integration points and time steps, the explicit scheme is the most efficient among the schemes we've been using. Where a simulation using the explicit scheme takes about $\sim 850\;\text{ms}$, using the implicit will yield us a run of about $\sim 950\;\text{ms}$ and the Crank-Nicolson scheme will have a run of $\sim 1150\;\text{ms}$. Even though the explicit scheme is more efficient, we also need to consider the fact that the implicit schemes has a greater flexibility regarding choice of $\Delta x$ and $\Delta t$-values. This, coupled with the error running as $\mathcal{O}(\Delta t^2)$ for the Crank-Nicolson scheme, making it even more accurate, means that whatever application these methods are used for, need to strike a balance between efficiency, flexibility and accuracy.
+\\
+\\
+Looking at figure \ref{fig:errorfigure}, we see the error in our calculations using the different methods as well. Here, we can see that as time progresses, the explicit method grows more accurate (the error drops) compared to both the implicit and Crank-Nicolson methods. This is the case both for the $\Delta x = 0.1$ and $\Delta x = 0.01$ case. This might stem from the fact that the implicit methods make use of the tridiagonal solver as already discussed, eventually leading to loss of numerical precision at a quicker rate than the explicit method. As such, it actually seems like the explicit method is the method in which we can achieve the greatest accuracy given our spatial and temporal choice of span.
+
+\subsubsection{2 Spatial Dimensions PDE}
+
+For the unitless, 2 Dimensional box simulation we have the results as seen in figures \ref{fig:2dfigures1}-\ref{fig:2dfigures4}.
+\\
+\\
+Looking at the initial conditions on the top plot in both figures \ref{fig:2dfigures1} and \ref{fig:2dfigures3}, we see that the boundary conditions both at the top and bottom are a tad bit different. This simply stems from the difference in the resolution of the system, and how the model is projected. The color-plots consist of a grid of different values, and the color value between the individual points are set to linearly change between the nodes. For this reason, the plots only give a model on how the distribution is between any given point, where the more points we have, the more accurate of a model we have. We can however also use this initial time plot to tell us something about the resolution of the plot. Given that we know the initial values to be 0 everywhere and 1 at the top and bottom, we can get a qualitative measure on how accurate we can expect the given model to be.
+\\
+\\
+Considering that we set up identical boundary conditions on opposite sides of the "box", we can't really expect the same behaviour of a linear drop from one end to the other as predicted in equation \ref{eq:linearexpectation}. We would however always expect that the "flow" of the $u(x,y,t)$-values after it has reached steady state to go from the higher values to the lower values, which is something we somewhat see in the steady state plots at the bottom of figure \ref{fig:2dfigures2} and \ref{fig:2dfigures4}. 
+\\
+\\
+We can do a thought experiment where the box is made up of a homogeneous material with a constant heat capacity and no heat production. The top and bottom walls of this box has a constant temperature $1$ while the rightmost and leftmost walls has a constant temperature $0$. If this is the case, we would expect that the temperature distribution within the box would be low close to the low-temperature walls, and high close to the high-temperature walls. We would also expect that the middle would behave as a saddle point. Since the middle point is as far away from any walls as possible, we would expect the gradient at this point to be 0. Purely qualitatively, this seems to be the case for the steady state, and as such, the results seem sensible.
+\\
+\\
+Doing these simulations using an implicit method could also be of use, given the less restrictive this is to our choice in the time steps $\Delta t$ and spatial steps $h$. Purely speculatively, given that we were to write an implicit algorithm using an iterative method that works, we could expect, if anything, a lot more freedom in simulating the systems both in terms of time steps $\Delta t$ and spatial steps $h$. The overall efficiency of such an algorithm as compared to the explicit scheme is however difficult to say anything about without having said algorithm. Comparing to the 1-dimensional analysis in regards to speed, as seen in table \ref{tab:timespent}, we see that the implicit methods in general are slower than the explicit method. As such, we would expect that the implicit methods for two dimensions should be slower than the explicit method. If this is the case, we would have to strike a balance between the efficiency of the explicit methods together with the freedom that the implicit methods yield us.
+\\
+\\
+Taking this into consideration, we can deduct that this simulation behaves as expected, as it converges into a steady state which physically makes sense. As such, it has been attempted to expand this into a real-world example, that being the lithosphere temperature distribution using the heat equation.
+
+\subsection{Lithosphere and the Heat Equation}
+
+Our results from running the model in the lithosphere can be found in figure \ref{fig:failedlitho}. These results are inconclusive, and the reason for this is unknown. I have decided to retain the results that I do have in this report, so that an eventual reader can figure out where this thought process might have gone wrong.
+\\
+\\
+It is difficult to see what has gone wrong, whether it is a flaw in the logic in the algorithm, a bug in the program code, or a fault in the plotting program. This will be "left as an exercise to the reader".
+
+\newpage
+
+\section{Conclusion}
+
+To conclude this, we need to look at the different simulations each on their own.
+\\
+\\
+For the 1 dimensional analysis, we got sensible and logical results when both using the explicit scheme, implicit scheme, and Crank-Nicolson scheme. We got that the steady state of the system was as expected, as well as having a similar "relaxation time" for all 3 schemes. We also got that the explicit scheme was the most efficient among the three, but the least flexible, while the Crank-Nicolson, being the least efficient, also being the most accurate and flexible. The balance therefore has to be struck between efficiency, accuracy and flexibility when choosing which scheme to apply.
+\\
+\\
+For the 2 dimensional analysis using the explicit scheme, we got somewhat expected results qualitatively speaking. As we didn't have a direct analytic expression to compare it to however, we could only see if the system behaves somewhat as expected, and see if the behaviour is something that can be justified. This doesn't mean that our results are correct, but given a thought experiment with temperature distribution, the behaviour seem to align with our intuition at the very least.
+\\
+\\
+Our attempt at modelling the Lithosphere unfortunately failed, and without any sensible information extracted from those simulations, we can't really tell if our numerical method actually works, or whether or not there is a logical flaw in our derivations. As such, our simulation regarding the lithosphere are inconclusive, with results that are non-realistic for unknown reasons.
+\\
+\\
+In hindsight, an attempt at doing the 2 dimensional analysis using an implicit method could have proven useful, especially given the lack of restrictions on the time step $\Delta t$ and spatial step $\Delta x$/$\Delta y$. This is therefore one of the main points of improvement that can be made in the short term to the results that my simulations have given us. We should also have given an attempt at parallelizing the algorithms, such that we could utilize more processing power. This was also unfortunately left out, and is another factor in which this could be improved. 
+
+\newpage
+
+\begin{appendix}
+
+\section{Deriving the Different Schemes}\label{app:deriv}
+
+We will here derive the numerical relationships that we've used for the explicit, implicit and Crank-Nicolsons scheme in this report. These methods are derived where we have the double derivative of the spatial terms, and a single derivative on the temporal. In other words, an equation on the form:
+\begin{equation}
+    \frac{\partial^2 u}{\partial x^2} = \frac{\partial u}{\partial t}.
+\end{equation}
+\subsection{Explicit Scheme}
+
+In general with the explicit scheme, we will use the forward Euler numerical approach to a Taylor-expansion.
+
+\subsubsection{Temporal Derivative}
+
+With the temporal derivative, we simply do a first-order Taylor expansion of the function $u(x,t=t+\Delta t)$ at a point around $t$, giving us:
+\begin{equation}
+    u(x,t+\Delta t) = u(x,t) + \frac{\partial u(x,t)}{\partial t}(t-t+\Delta t) + \mathcal{O}(\Delta t).
+\end{equation}
+Solving this equation for the derivative gives us:
+\begin{equation}
+    \frac{\partial u(x,t)}{\partial t} = \frac{u(x,t+\Delta t)-u(x,t)}{\Delta t} - \mathcal{O}(\Delta t)
+\end{equation}
+Switching notation to the one used in equation \ref{eq:firstordertimeuse}, with $u(x,t) \rightarrow u(x_i,t_j) = u_{i,j}$, and removing the error $\mathcal{O}(\Delta t)$, we get:
+\begin{equation}
+    u_t \approx \frac{u_{i,j+1}-u_{i,j}}{\Delta t}.
+\end{equation}
+Which was the temporal term I was going to show.
+
+\subsubsection{Spatial (double) Derivative}
+
+For the spatial double derivative, we first do the same Taylor approximation as above, just an approximation around $x$ for the function around $x-\Delta x$:
+\begin{equation}
+    u(x-\Delta x,t) = u(x,t) + \frac{\partial u(x,t)}{\partial x}(x-x-\Delta x) + \mathcal{O}(\Delta x)
+\end{equation}
+Solving this for the derivative gives us:
+\begin{equation}\label{eq:app1}
+    \frac{\partial u(x,t)}{\partial x} = -\frac{u(x-\Delta x,t)-u(x,t)}{\Delta x} - \mathcal{O}(\Delta x).
+\end{equation}
+We'll leave it at this for now. We now do a new similar Taylor expansion, but this time to the second order:
+\begin{equation}\label{eq:app2}
+    u(x+\Delta x,t) = u(x,t) + \frac{\partial u(x,t)}{\partial x}\Delta x + \frac{\partial^2 u(x,t)}{\partial x^2}(\Delta x)^2 - \mathcal{O}(\Delta x^2)
+\end{equation}
+Now we can implement our expression for the first derivative from equation \ref{eq:app1} into equation \ref{eq:app2}, and if we disregard the errors, we get:
+\begin{equation}
+    u(x+\Delta x,t) \approx u(x,t) + u(x-\Delta x,t) + u(x,t) + \frac{\partial^2 u(x,t)}{\partial x^2}(\Delta x)^2  
+\end{equation}
+Solving this equation for the double derivative gives us:
+\begin{equation}
+    \frac{\partial^2 u(x,t)}{\partial x^2} = \frac{u(x+\Delta x,t) - 2u(x,t) + u(x-\Delta x,t)}{(\Delta x)^2}.
+\end{equation}
+Changing up the notation as seen in equation \ref{eq:secondorderposuse}, this equals:
+\begin{equation}
+    u_{xx} \approx \frac{u_{i+1,j} - 2u_{i,j} + u_{i-1,j}}{(\Delta x)^2}
+\end{equation}
+Which was the spatial term that I was going to show.
+
+\subsection{Implicit Scheme}
+
+For the implicit scheme, we do much of the same as with the explicit scheme, just that we this time primarily use the backward Euler numerical approach to a Taylor expansion
+
+\subsubsection{Temporal Derivative}
+
+For the temporal derivative, we do the first-order Taylor expansion of the function $u(x,t-\Delta t)$ at a point around $t$, giving us:
+\begin{equation}
+    u(x,t-\Delta t) = u(x,t) + \frac{\partial u(x,t)}{\partial t}(t+t-\Delta t) + \mathcal{O}(\Delta t).
+\end{equation}
+Solving this for the derivative gives us:
+\begin{equation}
+    \frac{\partial u(x,t)}{\partial t} = \frac{u(x,t-\Delta t) - u(x,t)}{-\Delta t} - \mathcal{O}(\Delta t).
+\end{equation}
+Redefining our equation on the form seen in equation \ref{eq:timebackwards}, and neglecting the error, we end up with:
+\begin{equation}
+    u_{t} \approx \frac{u_{i,j} - u_{i,j-1}}{\Delta t}.
+\end{equation}
+Which was the temporal derivative I was going to show.
+
+\subsubsection{Spatial (double) Derivative}
+
+For the spatial derivative, we first do a forward, first order Taylor approximation of the function $u(x+\Delta x,t)$ around the point $x$ as follows:
+\begin{equation}
+    u(x+\Delta x,t) = u(x,t) + \frac{\partial u(x,t)}{\partial x}\Delta x + \mathcal{O}(\Delta x). 
+\end{equation}
+Solving this for the derivative, we have:
+\begin{equation}\label{eq:app3}
+    \frac{\partial u(x,t)}{\partial x} = \frac{u(x+\Delta x,t) - u(x,t)}{\Delta x}.
+\end{equation}
+And we'll leave this at that for now. We now do a second order Taylor approximation of the function $u(x-\Delta x,t)$ around the point $x$, disregarding the error, giving us:
+\begin{equation}\label{eq:app4}
+    u(x-\Delta x,t) \approx u(x,t) - \frac{\partial u(x,t)}{\partial x}\Delta x + \frac{\partial^2 u(x,t)}{\partial x^2}(\Delta x)^2.
+\end{equation}
+If we now take the expression in equation \ref{eq:app3}, disregarding the error, and insert for the derivative in equation \ref{eq:app4}, we get:
+\begin{equation}
+    u(x-\Delta x,t) \approx u(x,t) + u(x,t) - u(x+\Delta x,t) + \frac{\partial^2 u(x,t)}{\partial x^2}(\Delta x)^2.
+\end{equation}
+Finally, we can solve this for the double derivative:
+\begin{equation}
+    \frac{\partial^2 u(x,t)}{\partial x^2} = \frac{u(x+\Delta x,t) - 2u(x,t) + u(x-\Delta x,t)}{(\Delta x)^2}.
+\end{equation}
+Rewriting this on the form seen in equation \ref{eq:spacebackwards}, we finally get:
+\begin{equation}
+    u_{xx} = \frac{u_{i+1,j} - 2u{i,j} + u_{i-1,j}}{(\Delta x)^2}.
+\end{equation}
+Which was the spatial term we were going to show.
+
+\subsection{Crank-Nicolson Scheme}
+
+For the Crank-Nicolson scheme, we include a parameter $\theta$, and combine the explicit and implicit schemes as follows:
+\begin{equation}
+    \begin{split}
+    &\frac{\theta}{(\Delta x)^2}(u_{i-1,j}-2u_{i,j}+u_{i+1,j}) + \frac{1-\theta}{(\Delta x)^2}(u_{i+1,j-1}\\ &- 2u_{i,j-1} + u_{i-1,j-1}) = \frac{1}{\Delta t}(u_{i,j}-u_{i,j-1}).
+    \end{split}
+\end{equation}
+Here, if we pick $\theta = 0$, this will give us the explicit scheme, and if we pick $\theta = 1$, this will give us the implicit scheme. Picking $\theta = \frac{1}{2}$, this will give us the Crank-Nicolson scheme.\footnote{M. Hjorth-Jensen, Lecture notes in Computational Physics, University of Oslo (2013). p. 311, , equations 10.10 and onwards for a more thorough derivation of this scheme. Course URL: \url{https://www.uio.no/studier/emner/matnat/fys/FYS3150/index-eng.html}}
+
+\newpage
+.
+\newpage
+
+\section{Stencil Representation of the Methods}
+
+There are charts in which we can represent what the new values on a point $u_{i,j}$ depend on when calculating the new values. These dependency-charts are known as stencils, and here I've listed up the stencil representation for the three methods I've used (explicit, implicit, and Crank-Nicolson schemes).
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.35]{fig101.png}
+    \caption{The stencil representation for the explicit scheme. To calculate any given point using this scheme, we would require to know a value on any of the others. Typically, we require to know anything at the tmie step $t$ to calculate for a time step $t + \Delta t$. \footnote{Image Source: M. Hjorth-Jensen, Lecture notes in Computational Physics. p. 306, figure 10.1. Course URL: \url{https://www.uio.no/studier/emner/matnat/fys/FYS3150/index-eng.html}}}
+    \label{fig:explicitstencil}
+\end{figure}
+
+In figure \ref{fig:explicitstencil}, we see the stencil representation of the explicit scheme.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.35]{fig102.png}
+    \caption{The stencil representation for the implicit scheme. To calculate any given point using this scheme, we would require to know a value on any of the others. Given that we usually don't know all the values for the next time step, we can't directly calculate the next time step. It is possible however, hence the name "implicit". \footnote{Image Source: M. Hjorth-Jensen, Lecture notes in Computational Physics. p. 310, figure 10.2. Course URL: \url{https://www.uio.no/studier/emner/matnat/fys/FYS3150/index-eng.html}}}
+    \label{fig:ImplicitStencil}
+\end{figure}
+
+In figure \ref{fig:ImplicitStencil}, we see the stencil representation of the implicit scheme.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[scale=0.35]{fig103.png}
+    \caption{The stencil representation for the Crank-Nicolson scheme. To calculate any given point using this scheme, we would require to know a value on any of the others. Just like with the implicit scheme, we don't necessarily know all of the values to calculate the next time step, but it is possible, making this another implicit scheme. \footnote{Image Source: M. Hjorth-Jensen, Lecture notes in Computational Physics. p. 313, figure 10.3. Course URL: \url{https://www.uio.no/studier/emner/matnat/fys/FYS3150/index-eng.html}}}
+    \label{fig:CNStencil}
+\end{figure}
+
+In figure \ref{fig:CNStencil}, we see the stencil representation of the Crank-Nicolson scheme.
+
+\newpage
+.
+\newpage
+
+\onecolumngrid
+
+\section*{Acknowledgements}
+
+I have found most of the numerical methods discussed in this report in the lecture notes of M. Hjorth-Jensen for the course in Computational Physics at the University of Oslo, which can be found at the following URL: \url{https://github.com/CompPhysics/ComputationalPhysics/blob/master/doc/Lectures/lectures2015.pdf}. Most of the relevant stuff regarding PDEs are found in chapter 10 (p. 301).
+\\
+\\
+The lecture notes are so organized and easy to follow as to I felt like it needed a general acknowledgement. Cheers!
+
+\section*{Hyperlink Locations}
+
+The GIFs that are linked to can in general be found at the GitHub Repository in the following URL: \url{https://github.com/Jan-Egil/FYS3150/tree/master/Project5/Project5/GIF}
+\\
+\\
+The full GitHub repository containing all the code and other files can be found at the following URL: \url{https://github.com/Jan-Egil/FYS3150}
+\\
+\\
+The reason I will explicitly link it here is in case this report is printed out, rendering the hyperlinks useless. This is simply an attempt at making the results as well documented as possible.
+\\
+\\
+\end{appendix}
+
+\end{document}
+
